@@ -1,0 +1,105 @@
+name: 🏗️ Deploy Infrastructure (Terraform)
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+        - production
+      action:
+        description: 'Terraform action'
+        required: true
+        default: 'apply'
+        type: choice
+        options:
+        - plan
+        - apply
+        - destroy
+      db_password:
+        description: 'Database password'
+        required: true
+        type: string
+        default: 'workshop123'
+
+env:
+  AWS_REGION: us-east-1
+  TF_VAR_db_password: ${{ inputs.db_password }}
+
+jobs:
+  terraform:
+    name: 🚀 Terraform ${{ inputs.action }}
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: terraform/environments/${{ inputs.environment }}
+
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+
+    - name: 🔧 Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: 🏗️ Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: 1.5.0
+
+    - name: 🔍 Terraform Format Check
+      run: terraform fmt -check -recursive
+      continue-on-error: true
+
+    - name: ⚡ Terraform Init
+      run: terraform init
+
+    - name: ✅ Terraform Validate
+      run: terraform validate
+
+    - name: 📋 Terraform Plan
+      if: inputs.action == 'plan' || inputs.action == 'apply'
+      run: terraform plan -var="db_password=${{ inputs.db_password }}" -out=tfplan
+
+    - name: 🚀 Terraform Apply
+      if: inputs.action == 'apply'
+      run: terraform apply -auto-approve tfplan
+
+    - name: 💥 Terraform Destroy
+      if: inputs.action == 'destroy'
+      run: terraform destroy -auto-approve -var="db_password=${{ inputs.db_password }}"
+
+    - name: 📊 Terraform Output
+      if: inputs.action == 'apply'
+      id: terraform_output
+      run: |
+        echo "cluster_id=$(terraform output -raw cluster_id)" >> $GITHUB_OUTPUT
+        echo "rds_endpoint=$(terraform output -raw rds_endpoint)" >> $GITHUB_OUTPUT
+        echo "vpc_id=$(terraform output -raw vpc_id)" >> $GITHUB_OUTPUT
+
+    - name: 📝 Summary
+      if: inputs.action == 'apply'
+      run: |
+        echo "## 🎉 Infrastructure Deployment Complete!" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 📊 Resources Created:" >> $GITHUB_STEP_SUMMARY
+        echo "- **EKS Cluster:** \`${{ steps.terraform_output.outputs.cluster_id }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "- **RDS Endpoint:** \`${{ steps.terraform_output.outputs.rds_endpoint }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "- **VPC:** \`${{ steps.terraform_output.outputs.vpc_id }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 🚀 Next Steps:" >> $GITHUB_STEP_SUMMARY
+        echo "1. Run the **Deploy Applications** workflow to deploy the Kubernetes applications" >> $GITHUB_STEP_SUMMARY
+        echo "2. Configure kubectl: \`aws eks update-kubeconfig --region us-east-1 --name ${{ steps.terraform_output.outputs.cluster_id }}\`" >> $GITHUB_STEP_SUMMARY
+
+    outputs:
+      cluster_id: ${{ steps.terraform_output.outputs.cluster_id }}
+      rds_endpoint: ${{ steps.terraform_output.outputs.rds_endpoint }}
+      vpc_id: ${{ steps.terraform_output.outputs.vpc_id }}

@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: smart-mechanical-workshop-config
+  namespace: smart-mechanical-workshop
+  labels:
+    app.kubernetes.io/name: smart-mechanical-workshop
+    app.kubernetes.io/component: config
+data:
+  ASPNETCORE_ENVIRONMENT: "Production"
+  DB_HOST: "mysql-service"
+  DB_PORT: "3306"
+  MYSQL_DATABASE: "workshopdb"
+  MYSQL_USER: "workshopuser"
+  SMTP_HOST: "mailhog-service"
+  SMTP_PORT: "1025"
+  BASE_URL: "https://your-domain.com"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mysql-config
+  namespace: smart-mechanical-workshop
+  labels:
+    app.kubernetes.io/name: mysql
+    app.kubernetes.io/component: database
+data:
+  MYSQL_DATABASE: "workshopdb"
+  MYSQL_USER: "workshopuser"

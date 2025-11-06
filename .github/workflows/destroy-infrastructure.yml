@@ -1,0 +1,173 @@
+name: 💥 Destroy Infrastructure
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to destroy'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+        - production
+      confirm_destroy:
+        description: 'Type "DESTROY" to confirm deletion'
+        required: true
+        type: string
+      db_password:
+        description: 'Database password (required for destroy)'
+        required: true
+        type: string
+        default: 'workshop123'
+      cleanup_mode:
+        description: 'Cleanup mode'
+        required: true
+        default: 'complete'
+        type: choice
+        options:
+        - terraform-only
+        - complete
+        - dry-run
+
+env:
+  AWS_REGION: us-east-1
+  TF_VAR_db_password: ${{ inputs.db_password }}
+  PROJECT_NAME: smart-mechanical-workshop
+  ENVIRONMENT: ${{ inputs.environment }}
+
+jobs:
+  destroy:
+    name: 💥 Destroy Infrastructure
+    runs-on: ubuntu-latest
+    if: inputs.confirm_destroy == 'DESTROY'
+
+    defaults:
+      run:
+        working-directory: terraform/environments/${{ inputs.environment }}
+
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+
+    - name: 🔧 Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: 🏗️ Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: 1.5.0
+
+    - name: ⚡ Terraform Init
+      run: terraform init
+
+    - name: 📋 Terraform Plan (Destroy)
+      run: terraform plan -destroy -var="db_password=${{ inputs.db_password }}" -out=destroy-plan
+
+    - name: ⚠️ Warning Summary
+      run: |
+        echo "## ⚠️ INFRASTRUCTURE DESTRUCTION PLANNED" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Cleanup Mode**: \`${{ inputs.cleanup_mode }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+
+        if [[ "${{ inputs.cleanup_mode }}" == "dry-run" ]]; then
+          echo "**DRY RUN MODE** - No resources will actually be destroyed. This will show what would be deleted." >> $GITHUB_STEP_SUMMARY
+        elif [[ "${{ inputs.cleanup_mode }}" == "terraform-only" ]]; then
+          echo "**TERRAFORM ONLY MODE** - Only Terraform-managed resources will be destroyed:" >> $GITHUB_STEP_SUMMARY
+          echo "- EKS Cluster: \`smart-mechanical-workshop-${{ inputs.environment }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- RDS Database: \`smart-mechanical-workshop-${{ inputs.environment }}-db\`" >> $GITHUB_STEP_SUMMARY
+          echo "- VPC and networking resources managed by Terraform" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**⚠️ Note**: Orphaned resources (not in Terraform state) will NOT be cleaned." >> $GITHUB_STEP_SUMMARY
+        else
+          echo "**COMPLETE CLEANUP MODE** - ALL resources will be **PERMANENTLY DELETED**:" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ All Terraform-managed resources" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ EKS Clusters and Node Groups" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ RDS Instances, Parameter Groups, and Subnet Groups" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ VPCs, Subnets, NAT Gateways, Internet Gateways" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Security Groups and Route Tables" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Load Balancers and Elastic IPs" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Terraform state files" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**🎯 This ensures a completely clean slate for infrastructure recreation.**" >> $GITHUB_STEP_SUMMARY
+        fi
+
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**⚠️ THIS ACTION CANNOT BE UNDONE!**" >> $GITHUB_STEP_SUMMARY
+
+    - name: 💥 Terraform Destroy
+      run: terraform apply -auto-approve destroy-plan
+
+    - name: 🧹 Complete AWS Cleanup
+      if: inputs.cleanup_mode == 'complete' || inputs.cleanup_mode == 'dry-run'
+      env:
+        DRY_RUN: ${{ inputs.cleanup_mode == 'dry-run' && 'true' || 'false' }}
+      run: |
+        echo "## 🧹 Starting Complete AWS Cleanup" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "Mode: ${{ inputs.cleanup_mode }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+
+        # Execute cleanup script
+        chmod +x ${{ github.workspace }}/scripts/cleanup-aws-resources-pipeline.sh
+        ${{ github.workspace }}/scripts/cleanup-aws-resources-pipeline.sh
+
+    - name: 🔧 Cleanup Terraform State
+      if: inputs.cleanup_mode == 'complete'
+      run: |
+        echo "## 🔧 Cleaning Terraform State" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "Removing local Terraform state files..." >> $GITHUB_STEP_SUMMARY
+
+        # Remove Terraform state files
+        rm -rf .terraform terraform.tfstate* .terraform.lock.hcl || true
+
+        echo "✅ Terraform state cleaned" >> $GITHUB_STEP_SUMMARY
+
+    - name: ✅ Destruction Complete
+      run: |
+        echo "## ✅ Infrastructure Destroyed Successfully" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+
+        if [[ "${{ inputs.cleanup_mode }}" == "dry-run" ]]; then
+          echo "**DRY RUN COMPLETED** - No resources were actually destroyed." >> $GITHUB_STEP_SUMMARY
+        elif [[ "${{ inputs.cleanup_mode }}" == "terraform-only" ]]; then
+          echo "All Terraform-managed resources for the \`${{ inputs.environment }}\` environment have been destroyed." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Note:** Only Terraform-managed resources were destroyed. Orphaned resources may still exist." >> $GITHUB_STEP_SUMMARY
+        else
+          echo "All AWS resources for the \`${{ inputs.environment }}\` environment have been completely destroyed." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Complete cleanup performed:**" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Terraform destroy executed" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Orphaned AWS resources cleaned" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Terraform state files removed" >> $GITHUB_STEP_SUMMARY
+        fi
+
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Next steps:**" >> $GITHUB_STEP_SUMMARY
+        echo "- Infrastructure is ready to be recreated from scratch" >> $GITHUB_STEP_SUMMARY
+        echo "- All resource names are now available for reuse" >> $GITHUB_STEP_SUMMARY
+
+  validation-failed:
+    name: ❌ Destroy Validation Failed
+    runs-on: ubuntu-latest
+    if: inputs.confirm_destroy != 'DESTROY'
+
+    steps:
+    - name: ❌ Confirmation Required
+      run: |
+        echo "## ❌ Destroy Confirmation Failed" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "To destroy the infrastructure, you must:" >> $GITHUB_STEP_SUMMARY
+        echo "1. Type exactly **DESTROY** in the confirmation field" >> $GITHUB_STEP_SUMMARY
+        echo "2. Provide the correct database password" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Current input:** \`${{ inputs.confirm_destroy }}\`" >> $GITHUB_STEP_SUMMARY
+
+        exit 1

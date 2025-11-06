@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-service
+  labels:
+    app.kubernetes.io/name: smart-mechanical-workshop-api
+    app.kubernetes.io/component: api
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 80
+    targetPort: 8080
+    name: http
+  selector:
+    app.kubernetes.io/name: smart-mechanical-workshop-api
+    app.kubernetes.io/component: api
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mailhog-service
+  labels:
+    app.kubernetes.io/name: mailhog
+    app.kubernetes.io/component: mail-testing
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 1025
+    targetPort: 1025
+    name: smtp
+  - port: 8025
+    targetPort: 8025
+    name: web
+  selector:
+    app.kubernetes.io/name: mailhog
+    app.kubernetes.io/component: mail-testing

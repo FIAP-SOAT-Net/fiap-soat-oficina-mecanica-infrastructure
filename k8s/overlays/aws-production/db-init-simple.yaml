@@ -1,0 +1,244 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: db-init-scripts-simple
+  namespace: smart-mechanical-workshop
+data:
+  init.sql: |
+    USE workshopdb;
+
+    create table if not exists __EFMigrationsHistory (
+        MigrationId varchar(150) not null primary key,
+        ProductVersion varchar(32) not null
+    );
+
+    create table if not exists addresses (
+        id char(36) charset ascii not null primary key,
+        street varchar(100) not null,
+        city varchar(60) not null,
+        state varchar(30) not null,
+        zip_code varchar(15) not null,
+        created_at datetime(6) not null,
+        updated_at datetime(6) not null,
+        constraint IX_addresses_street_city_state_zip_code unique (street, city, state, zip_code)
+    );
+
+    create table if not exists available_services (
+        id char(36) charset ascii not null primary key,
+        name varchar(100) not null,
+        price decimal(18, 2) not null,
+        created_at datetime(6) not null,
+        updated_at datetime(6) not null,
+        constraint IX_available_services_name unique (name)
+    );
+
+    create table if not exists people (
+        id char(36) charset ascii not null primary key,
+        document varchar(100) not null,
+        fullname varchar(255) not null,
+        person_type varchar(100) not null,
+        employee_role varchar(100) null,
+        phone varchar(25) not null,
+        email varchar(255) not null,
+        address_id char(36) charset ascii not null,
+        created_at datetime(6) not null,
+        updated_at datetime(6) not null,
+        password varchar(100) default '' not null,
+        constraint IX_people_address_id unique (address_id),
+        constraint IX_people_document unique (document),
+        constraint IX_people_email unique (email),
+        constraint FK_people_addresses_address_id foreign key (address_id) references addresses (id) on delete cascade
+    );
+
+    create table if not exists supplies (
+        id char(36) charset ascii not null primary key,
+        name varchar(100) not null,
+        quantity int not null,
+        price decimal(18, 2) not null,
+        created_at datetime(6) not null,
+        updated_at datetime(6) not null,
+        constraint IX_supplies_name unique (name)
+    );
+
+    create table if not exists available_services_supply (
+        available_service_id char(36) charset ascii not null,
+        supply_id char(36) charset ascii not null,
+        quantity int default 0 not null,
+        primary key (
+            available_service_id,
+            supply_id
+        ),
+        constraint fk_available_service_supplies_available_service_id foreign key (available_service_id) references available_services (id) on delete cascade,
+        constraint fk_available_service_supplies_supply_id foreign key (supply_id) references supplies (id) on delete cascade
+    );
+
+    create index IX_available_services_supply_supply_id on available_services_supply (supply_id);
+
+    create table if not exists vehicles (
+        id char(36) charset ascii not null primary key,
+        license_plate varchar(20) not null,
+        manufacture_year int not null,
+        brand varchar(50) not null,
+        model varchar(100) not null,
+        person_id char(36) charset ascii not null,
+        created_at datetime(6) not null,
+        updated_at datetime(6) not null,
+        constraint IX_vehicles_license_plate unique (license_plate),
+        constraint FK_vehicles_people_person_id foreign key (person_id) references people (id) on delete cascade
+    );
+
+    create table if not exists service_orders (
+        id char(36) charset ascii not null primary key,
+        status varchar(100) not null,
+        client_id char(36) charset ascii not null,
+        vehicle_id char(36) charset ascii not null,
+        title varchar(250) not null,
+        description varchar(500) not null,
+        created_at datetime(6) not null,
+        updated_at datetime(6) not null,
+        constraint FK_service_orders_people_client_id foreign key (client_id) references people (id),
+        constraint FK_service_orders_vehicles_vehicle_id foreign key (vehicle_id) references vehicles (id)
+    );
+
+    create table if not exists available_services_services_orders (
+        available_service_id char(36) charset ascii not null,
+        service_order_id char(36) charset ascii not null,
+        primary key (
+            available_service_id,
+            service_order_id
+        ),
+        constraint fk_available_service_service_order foreign key (available_service_id) references available_services (id) on delete cascade,
+        constraint fk_service_order_available_service foreign key (service_order_id) references service_orders (id) on delete cascade
+    );
+
+    create index IX_available_services_services_orders_service_order_id on available_services_services_orders (service_order_id);
+
+    create table if not exists quotes (
+        id char(36) charset ascii not null primary key,
+        service_order_id char(36) charset ascii not null,
+        status varchar(100) not null,
+        total decimal(18, 2) not null,
+        created_at datetime(6) not null,
+        updated_at datetime(6) not null,
+        constraint FK_quotes_service_orders_service_order_id foreign key (service_order_id) references service_orders (id) on delete cascade
+    );
+
+    create table if not exists quote_services (
+        id char(36) charset ascii not null primary key,
+        quote_id char(36) charset ascii not null,
+        service_id char(36) charset ascii not null,
+        price decimal(18, 2) not null,
+        constraint FK_quote_services_available_services_service_id foreign key (service_id) references available_services (id),
+        constraint FK_quote_services_quotes_quote_id foreign key (quote_id) references quotes (id) on delete cascade
+    );
+
+    create index IX_quote_services_quote_id on quote_services (quote_id);
+    create index IX_quote_services_service_id on quote_services (service_id);
+
+    create table if not exists quote_supplies (
+        id char(36) charset ascii not null primary key,
+        quote_id char(36) charset ascii not null,
+        supply_id char(36) charset ascii not null,
+        price decimal(18, 2) not null,
+        quantity int not null,
+        constraint FK_quote_supplies_quotes_quote_id foreign key (quote_id) references quotes (id) on delete cascade,
+        constraint FK_quote_supplies_supplies_supply_id foreign key (supply_id) references supplies (id)
+    );
+
+    create index IX_quote_supplies_quote_id on quote_supplies (quote_id);
+    create index IX_quote_supplies_supply_id on quote_supplies (supply_id);
+    create index IX_quotes_service_order_id on quotes (service_order_id);
+
+    create table if not exists service_order_events (
+        id char(36) charset ascii not null primary key,
+        status varchar(100) not null,
+        service_order_id char(36) charset ascii not null,
+        created_at datetime(6) not null,
+        updated_at datetime(6) not null,
+        constraint FK_service_order_events_service_orders_service_order_id foreign key (service_order_id) references service_orders (id) on delete cascade
+    );
+
+    create index IX_service_order_events_service_order_id on service_order_events (service_order_id);
+    create index IX_service_orders_client_id on service_orders (client_id);
+    create index IX_service_orders_vehicle_id on service_orders (vehicle_id);
+    create index IX_vehicles_person_id on vehicles (person_id);
+
+  data.sql: |
+    USE workshopdb;
+    -- Preencher addresses
+    insert into addresses (id, street, city, state, zip_code, created_at, updated_at) values
+    (uuid(), 'Rua das Flores, 123', 'Porto Alegre', 'RS', '90000-000', now(), now()),
+    (uuid(), 'Avenida Brasil, 456', 'São Paulo', 'SP', '01000-000', now(), now()),
+    (uuid(), 'Rua XV de Novembro, 789', 'Curitiba', 'PR', '80000-000', now(), now()),
+    (uuid(), 'Rua Sete de Setembro, 321', 'Belo Horizonte', 'MG', '30000-000', now(), now()),
+    (uuid(), 'Rua das Palmeiras, 654', 'Florianópolis', 'SC', '88000-000', now(), now()),
+    (uuid(), 'Rua do Comércio, 987', 'Salvador', 'BA', '40000-000', now(), now()),
+    (uuid(), 'Rua dos Andradas, 159', 'Porto Alegre', 'RS', '90010-000', now(), now()),
+    (uuid(), 'Avenida Independência, 753', 'Recife', 'PE', '50000-000', now(), now()),
+    (uuid(), 'Rua Augusta, 852', 'São Paulo', 'SP', '01300-000', now(), now()),
+    (uuid(), 'Rua das Laranjeiras, 951', 'Rio de Janeiro', 'RJ', '22240-003', now(), now());
+
+    -- Preencher available_services
+    insert into available_services (id, name, price, created_at, updated_at) values
+    (uuid(), 'Troca de Óleo', 120.00, now(), now()),
+    (uuid(), 'Alinhamento e Balanceamento', 150.00, now(), now()),
+    (uuid(), 'Revisão Completa', 350.00, now(), now()),
+    (uuid(), 'Troca de Pastilha de Freio', 180.00, now(), now()),
+    (uuid(), 'Inspeção Veicular', 90.00, now(), now()),
+    (uuid(), 'Troca de Filtro de Ar', 60.00, now(), now()),
+    (uuid(), 'Troca de Pneu', 100.00, now(), now()),
+    (uuid(), 'Polimento', 200.00, now(), now()),
+    (uuid(), 'Troca de Correia Dentada', 400.00, now(), now()),
+    (uuid(), 'Higienização do Ar Condicionado', 130.00, now(), now());
+
+    -- Preencher supplies
+    insert into supplies (id, name, quantity, price, created_at, updated_at) values
+    (uuid(), 'Óleo 5W30', 50, 35.00, now(), now()),
+    (uuid(), 'Filtro de Óleo', 30, 25.00, now(), now()),
+    (uuid(), 'Pastilha de Freio', 40, 80.00, now(), now()),
+    (uuid(), 'Pneu Aro 15', 20, 250.00, now(), now()),
+    (uuid(), 'Filtro de Ar', 25, 40.00, now(), now()),
+    (uuid(), 'Correia Dentada', 15, 120.00, now(), now()),
+    (uuid(), 'Líquido de Arrefecimento', 35, 30.00, now(), now()),
+    (uuid(), 'Limpador de Para-brisa', 18, 20.00, now(), now()),
+    (uuid(), 'Desinfetante Automotivo', 22, 15.00, now(), now()),
+    (uuid(), 'Polidor de Pintura', 12, 60.00, now(), now());
+
+    -- Preencher people (8 clientes, 2 funcionários)
+    insert into people (id, person_type, document, fullname, phone, email, address_id, created_at, updated_at, password) values
+    (uuid(), 'Client', '12345678900', 'João da Silva', '51991080001', 'joao.silva@email.com', (select id from addresses limit 1 offset 0), now(), now(), 'METUNNJzqmaJiyiiMELveQ==.CjcklKdg4WGXYvTVILD8lK8EuHOco8a0GN20iZElexg='),
+    (uuid(), 'Client', '23456789011', 'Maria Oliveira', '51991080002', 'maria.oliveira@email.com', (select id from addresses limit 1 offset 1), now(), now(), 'METUNNJzqmaJiyiiMELveQ==.CjcklKdg4WGXYvTVILD8lK8EuHOco8a0GN20iZElexg='),
+    (uuid(), 'Client', '34567890122', 'Carlos Souza', '51991080003', 'carlos.souza@email.com', (select id from addresses limit 1 offset 2), now(), now(), 'METUNNJzqmaJiyiiMELveQ==.CjcklKdg4WGXYvTVILD8lK8EuHOco8a0GN20iZElexg='),
+    (uuid(), 'Client', '45678901233', 'Ana Paula', '51991080004', 'ana.paula@email.com', (select id from addresses limit 1 offset 3), now(), now(), 'METUNNJzqmaJiyiiMELveQ==.CjcklKdg4WGXYvTVILD8lK8EuHOco8a0GN20iZElexg='),
+    (uuid(), 'Client', '56789012344', 'Pedro Santos', '51991080005', 'pedro.santos@email.com', (select id from addresses limit 1 offset 4), now(), now(), 'METUNNJzqmaJiyiiMELveQ==.CjcklKdg4WGXYvTVILD8lK8EuHOco8a0GN20iZElexg='),
+    (uuid(), 'Client', '67890123455', 'Juliana Lima', '51991080006', 'juliana.lima@email.com', (select id from addresses limit 1 offset 5), now(), now(), 'METUNNJzqmaJiyiiMELveQ==.CjcklKdg4WGXYvTVILD8lK8EuHOco8a0GN20iZElexg='),
+    (uuid(), 'Client', '78901234566', 'Ricardo Alves', '51991080007', 'ricardo.alves@email.com', (select id from addresses limit 1 offset 6), now(), now(), 'METUNNJzqmaJiyiiMELveQ==.CjcklKdg4WGXYvTVILD8lK8EuHOco8a0GN20iZElexg='),
+    (uuid(), 'Client', '89012345677', 'Fernanda Costa', '51991080008', 'fernanda.costa@email.com', (select id from addresses limit 1 offset 7), now(), now(), 'METUNNJzqmaJiyiiMELveQ==.CjcklKdg4WGXYvTVILD8lK8EuHOco8a0GN20iZElexg='),
+    (uuid(), 'Employee', '90012345688', 'Lucas Mecânico', '51991080009', 'lucas.mecanico@email.com', (select id from addresses limit 1 offset 8), now(), now(), 'METUNNJzqmaJiyiiMELveQ==.CjcklKdg4WGXYvTVILD8lK8EuHOco8a0GN20iZElexg='),
+    (uuid(), 'Employee', '90123456799', 'Paulo Inspetor', '51991080010', 'paulo.inspetor@email.com', (select id from addresses limit 1 offset 9), now(), now(), 'METUNNJzqmaJiyiiMELveQ==.CjcklKdg4WGXYvTVILD8lK8EuHOco8a0GN20iZElexg=');
+
+    -- Preencher available_services_supply (relacionando serviços e insumos)
+    insert into available_services_supply (available_service_id, supply_id, quantity) values
+    ((select id from available_services where name = 'Troca de Óleo' limit 1), (select id from supplies where name = 'Óleo 5W30' limit 1), 3),
+    ((select id from available_services where name = 'Troca de Óleo' limit 1), (select id from supplies where name = 'Filtro de Óleo' limit 1), 1),
+    ((select id from available_services where name = 'Troca de Pastilha de Freio' limit 1), (select id from supplies where name = 'Pastilha de Freio' limit 1), 4),
+    ((select id from available_services where name = 'Troca de Pneu' limit 1), (select id from supplies where name = 'Pneu Aro 15' limit 1), 4),
+    ((select id from available_services where name = 'Troca de Filtro de Ar' limit 1), (select id from supplies where name = 'Filtro de Ar' limit 1), 1),
+    ((select id from available_services where name = 'Troca de Correia Dentada' limit 1), (select id from supplies where name = 'Correia Dentada' limit 1), 1),
+    ((select id from available_services where name = 'Revisão Completa' limit 1), (select id from supplies where name = 'Líquido de Arrefecimento' limit 1), 5),
+    ((select id from available_services where name = 'Polimento' limit 1), (select id from supplies where name = 'Polidor de Pintura' limit 1), 1),
+    ((select id from available_services where name = 'Higienização do Ar Condicionado' limit 1), (select id from supplies where name = 'Desinfetante Automotivo' limit 1), 1),
+    ((select id from available_services where name = 'Revisão Completa' limit 1), (select id from supplies where name = 'Limpador de Para-brisa' limit 1), 2);
+
+    -- Preencher vehicles (relacionando com clientes)
+    insert into vehicles (id, license_plate, manufacture_year, brand, model, person_id, created_at, updated_at) values
+    (uuid(), 'ABC1A23', 2018, 'Volkswagen', 'Gol', (select id from people where fullname = 'João da Silva' limit 1), now(), now()),
+    (uuid(), 'DEF2B34', 2020, 'Chevrolet', 'Onix', (select id from people where fullname = 'Maria Oliveira' limit 1), now(), now()),
+    (uuid(), 'GHI3C45', 2017, 'Fiat', 'Argo', (select id from people where fullname = 'Carlos Souza' limit 1), now(), now()),
+    (uuid(), 'JKL4D56', 2019, 'Ford', 'Ka', (select id from people where fullname = 'Ana Paula' limit 1), now(), now()),
+    (uuid(), 'MNO5E67', 2016, 'Hyundai', 'HB20', (select id from people where fullname = 'Pedro Santos' limit 1), now(), now()),
+    (uuid(), 'PQR6F78', 2021, 'Toyota', 'Corolla', (select id from people where fullname = 'Juliana Lima' limit 1), now(), now()),
+    (uuid(), 'STU7G89', 2015, 'Renault', 'Sandero', (select id from people where fullname = 'Ricardo Alves' limit 1), now(), now()),
+    (uuid(), 'VWX8H90', 2018, 'Honda', 'Civic', (select id from people where fullname = 'Fernanda Costa' limit 1), now(), now()),
+    (uuid(), 'YZA9I01', 2019, 'Nissan', 'Kicks', (select id from people where fullname = 'João da Silva' limit 1), now(), now()),
+    (uuid(), 'BCD0J12', 2022, 'Jeep', 'Renegade', (select id from people where fullname = 'Maria Oliveira' limit 1), now(), now());

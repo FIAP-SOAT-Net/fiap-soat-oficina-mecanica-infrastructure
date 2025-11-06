@@ -1,0 +1,158 @@
+name: 🚀 Deploy Applications (Kubernetes)
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+        - production
+      cluster_name:
+        description: 'EKS Cluster Name'
+        required: true
+        type: string
+        default: 'smart-mechanical-workshop-production'
+      rds_endpoint:
+        description: 'RDS Endpoint (with port)'
+        required: true
+        type: string
+
+env:
+  AWS_REGION: us-east-1
+
+jobs:
+  deploy-apps:
+    name: 🚀 Deploy Kubernetes Applications
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+
+    - name: 🔧 Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: ⚙️ Setup kubectl
+      uses: azure/setup-kubectl@v3
+      with:
+        version: 'v1.28.0'
+
+    - name: 🔗 Configure kubectl for EKS
+      run: |
+        aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name ${{ inputs.cluster_name }}
+        kubectl cluster-info
+
+    - name: 🔧 Update ConfigMap with RDS Endpoint
+      working-directory: k8s/overlays/aws-${{ inputs.environment }}
+      run: |
+        # Extract hostname from RDS endpoint (remove port)
+        RDS_HOST=$(echo "${{ inputs.rds_endpoint }}" | cut -d':' -f1)
+        echo "Updating ConfigMap with RDS endpoint: $RDS_HOST"
+
+        # Update configmap-aws.yaml with real RDS endpoint
+        sed -i "s|RDS_ENDPOINT_PLACEHOLDER|$RDS_HOST|g" configmap-aws.yaml
+        sed -i "s|smart-mechanical-workshop-production-db\..*\.us-east-1\.rds\.amazonaws\.com|$RDS_HOST|g" configmap-aws.yaml
+
+        echo "✅ ConfigMap updated with RDS endpoint"
+        cat configmap-aws.yaml | grep -A 5 -B 5 "DB_HOST\|CONNECTION_STRING"
+
+    - name: 📦 Deploy Namespace and Secrets
+      run: |
+        kubectl apply -f k8s/base/namespace.yaml
+        kubectl apply -f k8s/base/secrets.yaml
+
+    - name: 🗄️ Deploy ConfigMap
+      working-directory: k8s/overlays/aws-${{ inputs.environment }}
+      run: kubectl apply -f configmap-aws.yaml -n smart-mechanical-workshop
+
+    - name: 🚀 Deploy Applications
+      working-directory: k8s/overlays/aws-${{ inputs.environment }}
+      run: |
+        echo "Deploying MailHog..."
+        kubectl apply -f ../../base/mailhog-deployment.yaml -n smart-mechanical-workshop
+
+        echo "Deploying API..."
+        kubectl apply -f ../../base/api-deployment.yaml -n smart-mechanical-workshop
+
+        echo "Deploying Services..."
+        kubectl apply -f services-loadbalancer.yaml -n smart-mechanical-workshop
+
+    - name: 🗃️ Initialize Database
+      working-directory: k8s/overlays/aws-${{ inputs.environment }}
+      run: |
+        echo "Applying database initialization scripts..."
+        kubectl apply -f db-init-simple.yaml -n smart-mechanical-workshop
+        kubectl apply -f db-init-job-simple.yaml -n smart-mechanical-workshop
+
+    - name: ⏳ Wait for Deployments
+      run: |
+        echo "Waiting for API deployment..."
+        kubectl rollout status deployment/api-deployment -n smart-mechanical-workshop --timeout=300s
+
+        echo "Waiting for MailHog deployment..."
+        kubectl rollout status deployment/mailhog-deployment -n smart-mechanical-workshop --timeout=300s
+
+    - name: 🔍 Get LoadBalancer URLs
+      id: urls
+      run: |
+        echo "Waiting for LoadBalancer services to be ready..."
+        sleep 60
+
+        API_URL=$(kubectl get service api-service -n smart-mechanical-workshop -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+        MAILHOG_URL=$(kubectl get service mailhog-service -n smart-mechanical-workshop -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+
+        echo "api_url=$API_URL" >> $GITHUB_OUTPUT
+        echo "mailhog_url=$MAILHOG_URL" >> $GITHUB_OUTPUT
+
+    - name: 🧪 Test API Health
+      run: |
+        API_URL="${{ steps.urls.outputs.api_url }}"
+        if [ -n "$API_URL" ]; then
+          echo "Testing API health at: http://$API_URL/health"
+          for i in {1..10}; do
+            if curl -f -s "http://$API_URL/health" > /dev/null; then
+              echo "✅ API is healthy!"
+              break
+            else
+              echo "⏳ API not ready yet, attempt $i/10..."
+              sleep 30
+            fi
+          done
+        else
+          echo "⚠️ API URL not available yet"
+        fi
+
+    - name: 📊 Deployment Status
+      run: |
+        echo "## 🎉 Application Deployment Complete!" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 🚀 Deployed Services:" >> $GITHUB_STEP_SUMMARY
+
+        kubectl get pods -n smart-mechanical-workshop -o wide >> pods_status.txt
+        echo "#### 📦 Pods Status:" >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+        cat pods_status.txt >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+
+        kubectl get services -n smart-mechanical-workshop -o wide >> services_status.txt
+        echo "#### 🌐 Services Status:" >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+        cat services_status.txt >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+
+        if [ -n "${{ steps.urls.outputs.api_url }}" ]; then
+          echo "### 🔗 Access URLs:" >> $GITHUB_STEP_SUMMARY
+          echo "- **API:** http://${{ steps.urls.outputs.api_url }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **API Health:** http://${{ steps.urls.outputs.api_url }}/health" >> $GITHUB_STEP_SUMMARY
+          echo "- **MailHog:** http://${{ steps.urls.outputs.mailhog_url }}:8025" >> $GITHUB_STEP_SUMMARY
+        fi
