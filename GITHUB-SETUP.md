@@ -74,9 +74,60 @@ aws iam create-role \
   --assume-role-policy-document file://github-trust-policy.json
 ```
 
-### 2.3. Anexar policies necessárias
+### 2.3. Criar policy customizada para Terraform State
 
 ```bash
+# Criar arquivo de policy para S3 e DynamoDB
+cat > /tmp/s3-terraform-state-policy.json << 'EOF'
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:ListBucket",
+        "s3:GetBucketVersioning"
+      ],
+      "Resource": "arn:aws:s3:::smart-workshop-infrastructure-terraform-state"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:DeleteObject"
+      ],
+      "Resource": "arn:aws:s3:::smart-workshop-infrastructure-terraform-state/*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:DescribeTable",
+        "dynamodb:GetItem",
+        "dynamodb:PutItem",
+        "dynamodb:DeleteItem"
+      ],
+      "Resource": "arn:aws:dynamodb:us-west-2:243100982781:table/smart-workshop-terraform-locks"
+    }
+  ]
+}
+EOF
+
+# Criar a policy
+aws iam create-policy \
+  --policy-name TerraformStateAccessPolicy \
+  --policy-document file:///tmp/s3-terraform-state-policy.json \
+  --description "Policy for GitHub Actions to access Terraform state in S3 and DynamoDB"
+```
+
+### 2.4. Anexar policies necessárias
+
+```bash
+# Policy customizada para Terraform State
+aws iam attach-role-policy \
+  --role-name GitHubActionsEKSRole \
+  --policy-arn arn:aws:iam::243100982781:policy/TerraformStateAccessPolicy
+
 # Policy para EKS
 aws iam attach-role-policy \
   --role-name GitHubActionsEKSRole \
@@ -98,7 +149,7 @@ aws iam attach-role-policy \
   --policy-arn arn:aws:iam::aws:policy/AmazonEKSFargatePodExecutionRolePolicy
 ```
 
-### 2.4. Copiar ARN da Role
+### 2.5. Copiar ARN da Role
 
 ```bash
 aws iam get-role --role-name GitHubActionsEKSRole --query 'Role.Arn' --output text
@@ -156,7 +207,7 @@ Acesse: **GitHub Repository → Settings → Secrets and variables → Actions �
 | Secret Name | Valor | Descrição |
 |------------|-------|-----------|
 | `AWS_REGION` | `us-west-2` | Região AWS |
-| `AWS_ROLE_ARN` | `arn:aws:iam::243100982781:role/GitHubActionsEKSRole` | ARN da role criada no Passo 2.4 |
+| `AWS_ROLE_ARN` | `arn:aws:iam::243100982781:role/GitHubActionsEKSRole` | ARN da role criada no Passo 2.5 |
 | `TF_STATE_BUCKET` | `smart-workshop-infrastructure-terraform-state` | Bucket do Terraform state |
 | `TF_STATE_KEY` | `dev/terraform.tfstate` | Caminho do state file |
 | `TF_STATE_REGION` | `us-west-2` | Região do bucket |
