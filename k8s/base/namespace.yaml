@@ -1,8 +1,0 @@
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: smart-mechanical-workshop
-  labels:
-    name: smart-mechanical-workshop
-    app.kubernetes.io/name: smart-mechanical-workshop
-    app.kubernetes.io/instance: production
