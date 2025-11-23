@@ -10,6 +10,19 @@
 *.userosscache
 *.sln.docstates
 *.env
+!.env.example
+
+# Terraform
+*.tfstate
+*.tfstate.*
+*.tfvars
+!terraform.tfvars.example
+.terraform/
+.terraform.lock.hcl
+
+# Kubernetes secrets
+*secret*.yaml
+!secret.yaml.example
 
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs

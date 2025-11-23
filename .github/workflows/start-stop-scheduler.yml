@@ -1,0 +1,148 @@
+name: ⏰ Start/Stop Scheduler
+
+on:
+  schedule:
+    # Start: 07:00 BRT (10:00 UTC) - Every weekday
+    - cron: '0 10 * * 1-5'
+    # Stop: 20:00 BRT (23:00 UTC) - Every weekday
+    - cron: '0 23 * * 1-5'
+  
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action to perform'
+        required: true
+        type: choice
+        options:
+          - start
+          - stop
+
+env:
+  AWS_REGION: us-west-2
+  CLUSTER_NAME: smart-workshop-dev-cluster
+  NAMESPACE: smart-workshop
+
+jobs:
+  schedule:
+    name: Schedule Infrastructure
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Determine Action
+        id: action
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            ACTION="${{ github.event.inputs.action }}"
+          else
+            # Determine based on schedule
+            HOUR=$(date -u +%H)
+            if [ "$HOUR" -eq "10" ]; then
+              ACTION="start"
+            else
+              ACTION="stop"
+            fi
+          fi
+          echo "action=$ACTION" >> $GITHUB_OUTPUT
+          echo "Action to perform: $ACTION"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: GitHubActions-Scheduler
+
+      - name: Configure kubectl
+        run: |
+          aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name ${{ env.CLUSTER_NAME }}
+
+      - name: Start Infrastructure
+        if: steps.action.outputs.action == 'start'
+        run: |
+          echo "🚀 Starting infrastructure..."
+          
+          # Scale node group to 1
+          aws eks update-nodegroup-config \
+            --cluster-name ${{ env.CLUSTER_NAME }} \
+            --nodegroup-name smart-workshop-dev-node-group \
+            --scaling-config minSize=1,maxSize=2,desiredSize=1 \
+            --region ${{ env.AWS_REGION }}
+          
+          echo "Waiting for nodes to be ready..."
+          sleep 60
+          
+          # Scale API deployment to 1 replica
+          kubectl scale deployment api-deployment -n ${{ env.NAMESPACE }} --replicas=1
+          
+          # Scale MailHog deployment
+          kubectl scale deployment mailhog-deployment -n ${{ env.NAMESPACE }} --replicas=1
+          
+          echo "Waiting for pods to be ready..."
+          kubectl wait --for=condition=available --timeout=300s deployment/api-deployment -n ${{ env.NAMESPACE }}
+          kubectl wait --for=condition=available --timeout=300s deployment/mailhog-deployment -n ${{ env.NAMESPACE }}
+          
+          echo "✅ Infrastructure started successfully!"
+          kubectl get pods -n ${{ env.NAMESPACE }}
+
+      - name: Stop Infrastructure
+        if: steps.action.outputs.action == 'stop'
+        run: |
+          echo "🛑 Stopping infrastructure..."
+          
+          # Scale deployments to 0
+          kubectl scale deployment api-deployment -n ${{ env.NAMESPACE }} --replicas=0
+          kubectl scale deployment mailhog-deployment -n ${{ env.NAMESPACE }} --replicas=0
+          
+          echo "Waiting for pods to terminate..."
+          kubectl wait --for=delete pod --all -n ${{ env.NAMESPACE }} --timeout=300s || true
+          
+          echo "✅ Deployments stopped."
+
+      - name: Get Status
+        if: always()
+        run: |
+          echo "=== Current Status ==="
+          echo ""
+          echo "Nodes:"
+          kubectl get nodes
+          echo ""
+          echo "Pods:"
+          kubectl get pods -n ${{ env.NAMESPACE }}
+          echo ""
+          echo "Deployments:"
+          kubectl get deployments -n ${{ env.NAMESPACE }}
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Scheduler Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Action Performed" >> $GITHUB_STEP_SUMMARY
+          echo "- **Action**: ${{ steps.action.outputs.action }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Cluster**: ${{ env.CLUSTER_NAME }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Region**: ${{ env.AWS_REGION }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Namespace**: ${{ env.NAMESPACE }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Time (UTC)**: $(date -u)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ steps.action.outputs.action }}" == "start" ]; then
+            echo "### 🚀 Infrastructure Started" >> $GITHUB_STEP_SUMMARY
+            echo "- Node group scaled to 2 nodes" >> $GITHUB_STEP_SUMMARY
+            echo "- API deployment scaled to 2 replicas" >> $GITHUB_STEP_SUMMARY
+            echo "- MailHog deployment scaled to 1 replica" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### 🛑 Infrastructure Stopped" >> $GITHUB_STEP_SUMMARY
+            echo "- All deployments scaled to 0 replicas" >> $GITHUB_STEP_SUMMARY
+            echo "- Node group scaled to 1 node (minimum)" >> $GITHUB_STEP_SUMMARY
+            echo "- **Estimated savings**: ~$3-4/day during stopped hours" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Current State" >> $GITHUB_STEP_SUMMARY
+          kubectl get deployments -n ${{ env.NAMESPACE }} >> $GITHUB_STEP_SUMMARY 2>&1 || echo "Unable to fetch deployments" >> $GITHUB_STEP_SUMMARY

@@ -1,0 +1,51 @@
+# AWS Region
+aws_region = "us-west-2"
+
+# Environment
+environment  = "dev"
+project_name = "smart-workshop"
+
+# Networking (use values from RDS infrastructure)
+vpc_id = "vpc-xxxxxxxxxxxxx"  # Replace with your VPC ID
+subnet_ids = [
+  "subnet-xxxxxxxxxxxxx",  # us-west-2a
+  "subnet-yyyyyyyyyyyyy",  # us-west-2b
+]
+
+# EKS Configuration (FREE TIER OPTIMIZED)
+cluster_version      = "1.28"
+node_instance_types  = ["t3.small"]  # FREE TIER: 750h/mês = 1 instância 24/7
+node_desired_size    = 1              # FREE TIER: 1 node
+node_min_size        = 1              # FREE TIER: Mínimo 1 node
+node_max_size        = 2              # Máximo 2 nodes (controle de custo)
+node_disk_size       = 20
+
+# Database Configuration (from RDS infrastructure)
+rds_endpoint = "smart-workshop-dev-db.xxxxxxxxxxxxx.us-west-2.rds.amazonaws.com"
+db_name      = "smart_workshop"
+db_username  = "admin"
+db_password  = "YourSecurePassword123!"  # ⚠️ Use AWS Secrets Manager or environment variable
+
+# Application Configuration (FREE TIER OPTIMIZED)
+api_image          = "ghcr.io/fiap-soat-net/fiap-soat-oficina-mecanica:latest"
+api_replicas       = 1                # FREE TIER: 1 replica inicial
+api_cpu_request    = "100m"           # Reduzido para t3.small
+api_memory_request = "256Mi"          # Reduzido para t3.small
+api_cpu_limit      = "250m"           # Reduzido para t3.small
+api_memory_limit   = "512Mi"          # Reduzido para t3.small
+
+# JWT Configuration
+jwt_secret_key = "your-super-secret-key-must-be-at-least-32-characters-long-change-this"
+
+# HPA Configuration (FREE TIER OPTIMIZED)
+hpa_min_replicas = 1  # FREE TIER: Mínimo 1 replica
+hpa_max_replicas = 2  # FREE TIER: Máximo 2 replicas
+hpa_target_cpu   = 70
+
+# Tags
+tags = {
+  Environment = "dev"
+  Project     = "smart-workshop"
+  ManagedBy   = "terraform"
+  Repository  = "fiap-soat-oficina-mecanica-infrastructure"
+}

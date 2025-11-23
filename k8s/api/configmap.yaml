@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: api-config
+  namespace: smart-workshop
+  labels:
+    app: api
+data:
+  ASPNETCORE_ENVIRONMENT: "Development"
+  ASPNETCORE_URLS: "http://+:5180"
+  Email__SmtpHost: "mailhog-service"
+  Email__SmtpPort: "1025"
+  Email__SmtpUsername: ""
+  Email__SmtpPassword: ""
+  Email__EnableSsl: "false"
+  Email__SenderAddress: "noreply@smartworkshop.com"
+  Email__SenderName: "Smart Workshop"
+  BaseUrl: "http://api-service:5180"
+  Jwt__Issuer: "SmartWorkshop"
+  Jwt__Audience: "SmartWorkshopUsers"
+  Jwt__ExpiresInMinutes: "60"

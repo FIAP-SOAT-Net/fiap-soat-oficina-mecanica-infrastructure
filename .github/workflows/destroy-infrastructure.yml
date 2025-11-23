@@ -1,0 +1,129 @@
+name: 🗑️ Destroy Infrastructure
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type "DESTROY" to confirm deletion'
+        required: true
+      environment:
+        description: 'Environment to destroy'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+
+env:
+  AWS_REGION: ${{ secrets.AWS_REGION || 'us-west-2' }}
+  TF_VERSION: '1.5.0'
+
+jobs:
+  destroy:
+    name: Destroy Infrastructure
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    
+    steps:
+      - name: Validate Confirmation
+        run: |
+          if [ "${{ github.event.inputs.confirmation }}" != "DESTROY" ]; then
+            echo "❌ Confirmation failed. You must type 'DESTROY' to proceed."
+            exit 1
+          fi
+          echo "✅ Confirmation validated"
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: GitHubActions-Destroy
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - name: Get EKS Cluster Name
+        id: eks-cluster
+        working-directory: ./terraform
+        run: |
+          terraform init
+          CLUSTER_NAME=$(terraform output -raw cluster_name 2>/dev/null || echo "")
+          echo "cluster_name=$CLUSTER_NAME" >> $GITHUB_OUTPUT
+
+      - name: Configure kubectl
+        if: steps.eks-cluster.outputs.cluster_name != ''
+        run: |
+          aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name ${{ steps.eks-cluster.outputs.cluster_name }}
+
+      - name: Delete Kubernetes Resources
+        if: steps.eks-cluster.outputs.cluster_name != ''
+        continue-on-error: true
+        run: |
+          echo "Deleting Kubernetes resources..."
+          kubectl delete -f k8s/api/ --ignore-not-found=true
+          kubectl delete -f k8s/mailhog/ --ignore-not-found=true
+          kubectl delete namespace smart-workshop --ignore-not-found=true --timeout=5m
+
+      - name: Wait for LoadBalancers to be deleted
+        if: steps.eks-cluster.outputs.cluster_name != ''
+        continue-on-error: true
+        run: |
+          echo "Waiting for LoadBalancers to be deleted..."
+          sleep 60
+
+      - name: Terraform Init
+        working-directory: ./terraform
+        run: terraform init
+
+      - name: Terraform Destroy
+        working-directory: ./terraform
+        env:
+          TF_VAR_vpc_id: ${{ secrets.VPC_ID }}
+          TF_VAR_subnet_ids: ${{ secrets.SUBNET_IDS }}
+          TF_VAR_rds_endpoint: ${{ secrets.RDS_ENDPOINT }}
+          TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
+          TF_VAR_jwt_secret_key: ${{ secrets.JWT_SECRET_KEY }}
+        run: terraform destroy -auto-approve
+
+      - name: Verify Cleanup
+        run: |
+          echo "Verifying infrastructure cleanup..."
+          
+          # Check for remaining EKS clusters
+          REMAINING_CLUSTERS=$(aws eks list-clusters --region ${{ env.AWS_REGION }} --query "clusters[?contains(@, 'smart-workshop')]" --output text)
+          if [ ! -z "$REMAINING_CLUSTERS" ]; then
+            echo "⚠️ Warning: Some clusters may still exist: $REMAINING_CLUSTERS"
+          else
+            echo "✅ No remaining EKS clusters found"
+          fi
+          
+          # Check for remaining LoadBalancers
+          REMAINING_LBS=$(aws elbv2 describe-load-balancers --region ${{ env.AWS_REGION }} --query "LoadBalancers[?contains(LoadBalancerName, 'smart-workshop')].LoadBalancerName" --output text 2>/dev/null || echo "")
+          if [ ! -z "$REMAINING_LBS" ]; then
+            echo "⚠️ Warning: Some load balancers may still exist: $REMAINING_LBS"
+          else
+            echo "✅ No remaining load balancers found"
+          fi
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Destroy Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Status" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment**: ${{ github.event.inputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Region**: ${{ env.AWS_REGION }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Action**: Infrastructure destroyed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "⚠️ **WARNING**: All infrastructure has been permanently deleted!" >> $GITHUB_STEP_SUMMARY

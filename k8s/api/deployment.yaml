@@ -1,0 +1,128 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-deployment
+  namespace: smart-workshop
+  labels:
+    app: api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+        compute-type: fargate  # Label para Fargate Profile
+    spec:
+      containers:
+      - name: api
+        image: ghcr.io/fiap-soat-net/fiap-soat-oficina-mecanica:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 5180
+          name: http
+          protocol: TCP
+        env:
+        # Environment from ConfigMap
+        - name: ASPNETCORE_ENVIRONMENT
+          valueFrom:
+            configMapKeyRef:
+              name: api-config
+              key: ASPNETCORE_ENVIRONMENT
+        - name: ASPNETCORE_URLS
+          valueFrom:
+            configMapKeyRef:
+              name: api-config
+              key: ASPNETCORE_URLS
+        - name: Email__SmtpHost
+          valueFrom:
+            configMapKeyRef:
+              name: api-config
+              key: Email__SmtpHost
+        - name: Email__SmtpPort
+          valueFrom:
+            configMapKeyRef:
+              name: api-config
+              key: Email__SmtpPort
+        - name: Email__SmtpUsername
+          valueFrom:
+            configMapKeyRef:
+              name: api-config
+              key: Email__SmtpUsername
+        - name: Email__SmtpPassword
+          valueFrom:
+            configMapKeyRef:
+              name: api-config
+              key: Email__SmtpPassword
+        - name: Email__EnableSsl
+          valueFrom:
+            configMapKeyRef:
+              name: api-config
+              key: Email__EnableSsl
+        - name: Email__SenderAddress
+          valueFrom:
+            configMapKeyRef:
+              name: api-config
+              key: Email__SenderAddress
+        - name: Email__SenderName
+          valueFrom:
+            configMapKeyRef:
+              name: api-config
+              key: Email__SenderName
+        - name: BaseUrl
+          valueFrom:
+            configMapKeyRef:
+              name: api-config
+              key: BaseUrl
+        - name: Jwt__Issuer
+          valueFrom:
+            configMapKeyRef:
+              name: api-config
+              key: Jwt__Issuer
+        - name: Jwt__Audience
+          valueFrom:
+            configMapKeyRef:
+              name: api-config
+              key: Jwt__Audience
+        - name: Jwt__ExpiresInMinutes
+          valueFrom:
+            configMapKeyRef:
+              name: api-config
+              key: Jwt__ExpiresInMinutes
+        # Secrets
+        - name: ConnectionStrings__DefaultConnection
+          valueFrom:
+            secretKeyRef:
+              name: api-secret
+              key: DB_CONNECTION_STRING
+        - name: Jwt__Key
+          valueFrom:
+            secretKeyRef:
+              name: api-secret
+              key: JWT_SECRET_KEY
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 5180
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 5180
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+      restartPolicy: Always

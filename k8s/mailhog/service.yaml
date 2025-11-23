@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: mailhog-service
+  namespace: smart-workshop
+  labels:
+    app: mailhog
+  annotations:
+    description: "MailHog service - Use kubectl port-forward para acessar localmente"
+spec:
+  type: ClusterIP  # FREE TIER: Sem LoadBalancer (economiza ~$18/mês)
+  selector:
+    app: mailhog
+  ports:
+  - name: smtp
+    port: 1025
+    targetPort: 1025
+    protocol: TCP
+  - name: http
+    port: 8025
+    targetPort: 8025
+    protocol: TCP
+  sessionAffinity: None
