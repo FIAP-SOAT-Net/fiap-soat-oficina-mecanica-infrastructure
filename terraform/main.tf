@@ -81,5 +81,5 @@ resource "kubernetes_namespace" "main" {
     }
   }
 
-  depends_on = [aws_eks_node_group.main]
+  depends_on = [aws_eks_fargate_profile.app]
 }

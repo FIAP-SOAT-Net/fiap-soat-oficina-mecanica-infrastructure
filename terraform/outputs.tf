@@ -25,15 +25,15 @@ output "cluster_certificate_authority_data" {
   sensitive   = true
 }
 
-# Node Group Outputs
-output "node_group_id" {
-  description = "EKS node group ID"
-  value       = aws_eks_node_group.main.id
+# Fargate Profile Outputs
+output "fargate_profile_app_id" {
+  description = "Fargate profile ID for application namespace"
+  value       = aws_eks_fargate_profile.app.id
 }
 
-output "node_group_status" {
-  description = "Status of the EKS node group"
-  value       = aws_eks_node_group.main.status
+output "fargate_profile_kube_system_id" {
+  description = "Fargate profile ID for kube-system namespace"
+  value       = aws_eks_fargate_profile.kube_system.id
 }
 
 # IAM Outputs
@@ -42,9 +42,9 @@ output "cluster_iam_role_arn" {
   value       = aws_iam_role.eks_cluster_role.arn
 }
 
-output "node_group_iam_role_arn" {
-  description = "IAM role ARN of the EKS node group"
-  value       = aws_iam_role.eks_node_group_role.arn
+output "fargate_pod_execution_role_arn" {
+  description = "IAM role ARN for Fargate pod execution"
+  value       = aws_iam_role.fargate_pod_execution_role.arn
 }
 
 # Kubectl Config Command
@@ -76,13 +76,16 @@ output "useful_commands" {
   description = "Useful kubectl commands"
   value = <<-EOT
     # Configure kubectl
-    ${self.configure_kubectl}
+    aws eks update-kubeconfig --region ${var.aws_region} --name ${aws_eks_cluster.main.name}
+    
+    # Get Fargate nodes
+    kubectl get nodes
     
     # Get all resources
     kubectl get all -n ${var.project_name}
     
-    # Get pods
-    kubectl get pods -n ${var.project_name}
+    # Get pods (with node info)
+    kubectl get pods -n ${var.project_name} -o wide
     
     # Get services
     kubectl get svc -n ${var.project_name}
@@ -94,9 +97,12 @@ output "useful_commands" {
     kubectl logs -n ${var.project_name} -l app=mailhog -f
     
     # Scale API deployment
-    kubectl scale deployment api-deployment -n ${var.project_name} --replicas=3
+    kubectl scale deployment api-deployment -n ${var.project_name} --replicas=2
     
     # Get HPA status
     kubectl get hpa -n ${var.project_name}
+    
+    # Get Fargate profiles
+    aws eks list-fargate-profiles --cluster-name ${aws_eks_cluster.main.name}
   EOT
 }
