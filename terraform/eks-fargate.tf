@@ -159,6 +159,32 @@ resource "aws_eks_fargate_profile" "kube_system" {
   ]
 }
 
+# Fargate Profile for AWS Load Balancer Controller
+resource "aws_eks_fargate_profile" "aws_lb_controller" {
+  cluster_name           = aws_eks_cluster.main.name
+  fargate_profile_name   = "${var.project_name}-${var.environment}-aws-lb-controller-profile"
+  pod_execution_role_arn = aws_iam_role.fargate_pod_execution_role.arn
+  subnet_ids             = [aws_subnet.private_1.id, aws_subnet.private_2.id]
+
+  selector {
+    namespace = "kube-system"
+    labels = {
+      "app.kubernetes.io/name" = "aws-load-balancer-controller"
+    }
+  }
+
+  tags = merge(
+    var.tags,
+    {
+      Name = "${var.project_name}-${var.environment}-aws-lb-controller-fargate-profile"
+    }
+  )
+
+  depends_on = [
+    aws_iam_role_policy_attachment.fargate_pod_execution_role_policy
+  ]
+}
+
 # Patch CoreDNS to run on Fargate
 resource "null_resource" "patch_coredns" {
   depends_on = [
