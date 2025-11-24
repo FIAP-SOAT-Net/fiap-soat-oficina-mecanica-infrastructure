@@ -5,8 +5,15 @@ resource "aws_eks_cluster" "main" {
   version  = var.cluster_version
 
   vpc_config {
-    # Control plane needs public subnets for API endpoint
-    subnet_ids              = concat(data.aws_subnets.public.ids, [aws_subnet.private_1.id, aws_subnet.private_2.id])
+    # Use only subnets in us-west-2b and us-west-2d (same AZs as initial creation)
+    # Get existing public subnets + new private subnets in those AZs
+    subnet_ids              = concat(
+      [
+        for subnet_id in data.aws_subnets.public.ids :
+        subnet_id if contains(["us-west-2b", "us-west-2d"], data.aws_subnet.public_details[subnet_id].availability_zone)
+      ],
+      [aws_subnet.private_1.id, aws_subnet.private_2.id]
+    )
     endpoint_private_access = true
     endpoint_public_access  = true
     security_group_ids      = [aws_security_group.eks_cluster.id]

@@ -1,11 +1,12 @@
 # Private Subnets for Fargate
 # Fargate requires private subnets with NAT Gateway access
+# Must use the same AZs as the cluster was created with: us-west-2b and us-west-2d
 
-# Create private subnets in 2 different AZs
+# Create private subnets in the SAME AZs as cluster creation
 resource "aws_subnet" "private_1" {
   vpc_id            = var.vpc_id
   cidr_block        = "172.31.64.0/20"  # 172.31.64.0 - 172.31.79.255
-  availability_zone = data.aws_availability_zones.available.names[0]
+  availability_zone = "us-west-2b"      # Same as cluster subnet 1
 
   tags = {
     Name                                                    = "${var.project_name}-${var.environment}-private-subnet-1"
@@ -17,7 +18,7 @@ resource "aws_subnet" "private_1" {
 resource "aws_subnet" "private_2" {
   vpc_id            = var.vpc_id
   cidr_block        = "172.31.80.0/20"  # 172.31.80.0 - 172.31.95.255
-  availability_zone = data.aws_availability_zones.available.names[1]
+  availability_zone = "us-west-2d"      # Same as cluster subnet 2
 
   tags = {
     Name                                                    = "${var.project_name}-${var.environment}-private-subnet-2"

@@ -30,6 +30,12 @@ data "aws_subnets" "public" {
   }
 }
 
+# Get details of each public subnet to filter by AZ
+data "aws_subnet" "public_details" {
+  for_each = toset(data.aws_subnets.public.ids)
+  id       = each.value
+}
+
 # Data source for selected subnets details
 data "aws_subnets" "selected" {
   filter {
