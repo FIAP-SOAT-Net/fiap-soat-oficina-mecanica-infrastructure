@@ -273,44 +273,31 @@ Para facilitar, use o script que obtém todos os valores automaticamente:
 | `TF_STATE_BUCKET` | `smart-workshop-infrastructure-terraform-state` | Bucket do Terraform state |
 | `TF_STATE_KEY` | `dev/terraform.tfstate` | Caminho do state file |
 | `TF_STATE_REGION` | `us-west-2` | Região do bucket |
-| `VPC_ID` | `vpc-00bb83a83a9813240` | ID da VPC (mesmo da infra de database) |
-| `SUBNET_IDS` | `["subnet-xxx","subnet-yyy"]` | Array JSON com 2+ subnet IDs (AZs diferentes) ⚠️ |
+| `VPC_ID` | `vpc-00bb83a83a9813240` | ID da VPC onde recursos serão criados |
 | `RDS_ENDPOINT` | `seu-rds-endpoint.us-west-2.rds.amazonaws.com` | Endpoint do RDS MySQL |
 | `DB_PASSWORD` | `sua-senha-segura` | Senha do banco (⚠️ NUNCA commitar!) |
 | `JWT_SECRET_KEY` | `sua-chave-jwt-secreta` | Chave secreta para JWT da API |
 
-**⚠️ IMPORTANTE:** O valor de `SUBNET_IDS` deve ser um **array JSON válido**:
-- ✅ Correto: `["subnet-0abc123","subnet-0def456"]`
-- ❌ Errado: `subnet-0abc123,subnet-0def456`
-- ❌ Errado: `['subnet-0abc123','subnet-0def456']` (aspas simples)
+**✅ Agora são apenas 9 secrets!** O Terraform cria automaticamente as subnets privadas necessárias para o Fargate.
 
 ### 4.3. Como obter os valores dos secrets (Manual)
 
-#### VPC_ID e SUBNET_IDS (da infraestrutura de database)
+#### VPC_ID
 
 ```bash
 # Obter VPC ID
-aws ec2 describe-vpcs --filters "Name=tag:Name,Values=smart-workshop-*" --query 'Vpcs[0].VpcId' --output text
-
-# Listar TODAS as subnets da VPC (com detalhes)
-aws ec2 describe-subnets \
-  --filters "Name=vpc-id,Values=vpc-00bb83a83a9813240" \
-  --query 'Subnets[*].[SubnetId,AvailabilityZone,CidrBlock,Tags[?Key==`Name`].Value|[0]]' \
+aws ec2 describe-vpcs \
+  --query 'Vpcs[*].[VpcId,CidrBlock,IsDefault,Tags[?Key==`Name`].Value|[0]]' \
   --output table
 
-# Gerar formato JSON correto para SUBNET_IDS (primeiras 2 subnets):
-aws ec2 describe-subnets \
-  --filters "Name=vpc-id,Values=vpc-00bb83a83a9813240" \
-  --query 'Subnets[0:2].SubnetId' \
-  --output json | jq -c .
-
-# Exemplo de output (copie exatamente assim):
-# ["subnet-0abc123def456","subnet-0xyz789ghi012"]
-
-# ⚠️ IMPORTANTE: Escolha 2 subnets em AZs DIFERENTES (ex: us-west-2a e us-west-2b)
+# Ou se souber o nome:
+aws ec2 describe-vpcs \
+  --filters "Name=tag:Name,Values=smart-workshop-*" \
+  --query 'Vpcs[0].VpcId' \
+  --output text
 ```
 
-**⚠️ IMPORTANTE:** Copie o output do comando acima **EXATAMENTE** como aparece, incluindo os colchetes e aspas duplas!
+**💡 Dica:** Pode usar a VPC default da AWS (vpc-00bb83a83a9813240). O Terraform criará automaticamente as subnets privadas necessárias!
 
 #### RDS_ENDPOINT
 
@@ -339,10 +326,6 @@ openssl rand -base64 32
 **Exemplo prático:**
 
 ```
-Name:   SUBNET_IDS
-Secret: ["subnet-0abc123def456789","subnet-0xyz789ghi012345"]
-        ↑ Copie EXATAMENTE assim, com colchetes e aspas duplas
-
 Name:   VPC_ID  
 Secret: vpc-00bb83a83a9813240
         ↑ Apenas o ID, sem aspas
@@ -350,6 +333,10 @@ Secret: vpc-00bb83a83a9813240
 Name:   RDS_ENDPOINT
 Secret: smart-workshop-db.abc123.us-west-2.rds.amazonaws.com
         ↑ Apenas o hostname, sem porta ou protocolo
+
+Name:   JWT_SECRET_KEY
+Secret: a8s7d6f5g4h3j2k1l9m8n7b6v5c4x3z2
+        ↑ String aleatória gerada com openssl rand -base64 32
 ```
 
 ---
@@ -487,10 +474,10 @@ Antes de rodar o deploy, confirme:
 
 - [ ] OIDC Provider criado na AWS
 - [ ] IAM Role `GitHubActionsEKSRole` criada
-- [ ] Policies anexadas à role (EKS, EC2, IAM, Fargate, S3)
+- [ ] Policies anexadas à role (5 policies: TerraformState, EKS, EC2, IAM, Fargate)
 - [ ] S3 Bucket criado com versionamento e criptografia
-- [ ] Todos os 10 secrets configurados no GitHub
-- [ ] VPC_ID e SUBNET_IDS obtidos da infraestrutura de database
+- [ ] Todos os 9 secrets configurados no GitHub
+- [ ] VPC_ID obtido (pode usar VPC default)
 - [ ] Trust policy da role aponta para o repositório correto
 - [ ] Workflows commitados e pushed para o repositório
 - [ ] Permissões do GitHub Actions configuradas (read/write)

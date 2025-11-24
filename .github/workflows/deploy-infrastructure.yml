@@ -57,7 +57,6 @@ jobs:
         run: |
           cat > terraform.tfvars << EOF
           vpc_id         = "${{ secrets.VPC_ID }}"
-          subnet_ids     = ${{ secrets.SUBNET_IDS }}
           rds_endpoint   = "${{ secrets.RDS_ENDPOINT }}"
           db_password    = "${{ secrets.DB_PASSWORD }}"
           jwt_secret_key = "${{ secrets.JWT_SECRET_KEY }}"

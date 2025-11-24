@@ -104,7 +104,7 @@ resource "aws_eks_fargate_profile" "app" {
   cluster_name           = aws_eks_cluster.main.name
   fargate_profile_name   = "${var.project_name}-${var.environment}-app-profile"
   pod_execution_role_arn = aws_iam_role.fargate_pod_execution_role.arn
-  subnet_ids             = var.subnet_ids
+  subnet_ids             = [aws_subnet.private_1.id, aws_subnet.private_2.id]
 
   selector {
     namespace = var.project_name
@@ -130,7 +130,7 @@ resource "aws_eks_fargate_profile" "kube_system" {
   cluster_name           = aws_eks_cluster.main.name
   fargate_profile_name   = "${var.project_name}-${var.environment}-kube-system-profile"
   pod_execution_role_arn = aws_iam_role.fargate_pod_execution_role.arn
-  subnet_ids             = var.subnet_ids
+  subnet_ids             = [aws_subnet.private_1.id, aws_subnet.private_2.id]
 
   selector {
     namespace = "kube-system"

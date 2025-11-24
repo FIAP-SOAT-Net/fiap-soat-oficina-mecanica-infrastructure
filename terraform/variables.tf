@@ -20,13 +20,8 @@ variable "project_name" {
 
 # Networking
 variable "vpc_id" {
-  description = "VPC ID (from RDS infrastructure)"
+  description = "VPC ID (existing VPC where resources will be created)"
   type        = string
-}
-
-variable "subnet_ids" {
-  description = "List of subnet IDs for EKS (at least 2 in different AZs)"
-  type        = list(string)
 }
 
 # EKS Configuration
