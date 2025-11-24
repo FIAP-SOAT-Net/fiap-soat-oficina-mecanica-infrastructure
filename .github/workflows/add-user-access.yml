@@ -1,4 +1,4 @@
-name: Add User to EKS Cluster
+name: 🔐 Add User to EKS Cluster
 
 on:
   workflow_dispatch:
