@@ -272,24 +272,6 @@ resource "aws_iam_role_policy" "aws_load_balancer_controller" {
   })
 }
 
-# OIDC Provider for EKS (if not already created)
-data "tls_certificate" "eks" {
-  url = aws_eks_cluster.main.identity[0].oidc[0].issuer
-}
-
-resource "aws_iam_openid_connect_provider" "eks" {
-  client_id_list  = ["sts.amazonaws.com"]
-  thumbprint_list = [data.tls_certificate.eks.certificates[0].sha1_fingerprint]
-  url             = aws_eks_cluster.main.identity[0].oidc[0].issuer
-
-  tags = merge(
-    var.tags,
-    {
-      Name = "${var.project_name}-${var.environment}-eks-oidc"
-    }
-  )
-}
-
 # Output for AWS Load Balancer Controller installation
 output "aws_load_balancer_controller_role_arn" {
   description = "IAM Role ARN for AWS Load Balancer Controller"
