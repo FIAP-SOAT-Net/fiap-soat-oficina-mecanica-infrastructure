@@ -74,10 +74,11 @@ aws iam create-role \
   --assume-role-policy-document file://github-trust-policy.json
 ```
 
-### 2.3. Criar policy customizada para Terraform State
+### 2.3. Criar policies customizadas
+
+#### Policy 1: Terraform State (S3 + DynamoDB)
 
 ```bash
-# Criar arquivo de policy para S3 e DynamoDB
 cat > /tmp/s3-terraform-state-policy.json << 'EOF'
 {
   "Version": "2012-10-17",
@@ -113,40 +114,83 @@ cat > /tmp/s3-terraform-state-policy.json << 'EOF'
 }
 EOF
 
-# Criar a policy
 aws iam create-policy \
   --policy-name TerraformStateAccessPolicy \
   --policy-document file:///tmp/s3-terraform-state-policy.json \
   --description "Policy for GitHub Actions to access Terraform state in S3 and DynamoDB"
 ```
 
+#### Policy 2: EKS Full Access
+
+```bash
+cat > /tmp/eks-full-access-policy.json << 'EOF'
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "eks:*",
+        "ec2:CreateNetworkInterface",
+        "ec2:DeleteNetworkInterface",
+        "ec2:DescribeNetworkInterfaces",
+        "ec2:DescribeSecurityGroups",
+        "ec2:DescribeSubnets",
+        "ec2:DescribeVpcs",
+        "ec2:ModifyNetworkInterfaceAttribute",
+        "ec2:CreateSecurityGroup",
+        "ec2:DeleteSecurityGroup",
+        "ec2:AuthorizeSecurityGroupIngress",
+        "ec2:AuthorizeSecurityGroupEgress",
+        "ec2:RevokeSecurityGroupIngress",
+        "ec2:RevokeSecurityGroupEgress",
+        "ec2:CreateTags",
+        "ec2:DeleteTags",
+        "iam:CreateServiceLinkedRole",
+        "iam:PassRole"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
+EOF
+
+aws iam create-policy \
+  --policy-name EKSFullAccessPolicy \
+  --policy-document file:///tmp/eks-full-access-policy.json \
+  --description "Full access to EKS operations for GitHub Actions"
+```
+
 ### 2.4. Anexar policies necessárias
 
 ```bash
-# Policy customizada para Terraform State
+# Policy 1: Terraform State (customizada)
 aws iam attach-role-policy \
   --role-name GitHubActionsEKSRole \
   --policy-arn arn:aws:iam::243100982781:policy/TerraformStateAccessPolicy
 
-# Policy para EKS
+# Policy 2: EKS Full Access (customizada)
 aws iam attach-role-policy \
   --role-name GitHubActionsEKSRole \
-  --policy-arn arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
+  --policy-arn arn:aws:iam::243100982781:policy/EKSFullAccessPolicy
 
-# Policy para EC2 (VPC, Security Groups)
+# Policy 3: EC2 Full Access (VPC, Security Groups, Subnets)
 aws iam attach-role-policy \
   --role-name GitHubActionsEKSRole \
   --policy-arn arn:aws:iam::aws:policy/AmazonEC2FullAccess
 
-# Policy para IAM (criar roles do EKS)
+# Policy 4: IAM Full Access (criar roles do EKS/Fargate)
 aws iam attach-role-policy \
   --role-name GitHubActionsEKSRole \
   --policy-arn arn:aws:iam::aws:policy/IAMFullAccess
 
-# Policy para Fargate
+# Policy 5: Fargate Pod Execution
 aws iam attach-role-policy \
   --role-name GitHubActionsEKSRole \
   --policy-arn arn:aws:iam::aws:policy/AmazonEKSFargatePodExecutionRolePolicy
+
+# Verificar policies anexadas
+aws iam list-attached-role-policies --role-name GitHubActionsEKSRole --output table
 ```
 
 ### 2.5. Copiar ARN da Role
