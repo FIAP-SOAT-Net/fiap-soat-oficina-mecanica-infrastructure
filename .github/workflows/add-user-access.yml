@@ -1,0 +1,112 @@
+name: Add User to EKS Cluster
+
+on:
+  workflow_dispatch:
+    inputs:
+      user_arn:
+        description: 'ARN do usuário IAM (ex: arn:aws:iam::243100982781:user/igortessaro)'
+        required: true
+        default: 'arn:aws:iam::243100982781:user/igortessaro'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  add-user-access:
+    name: Configure EKS User Access
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+          role-session-name: GitHubActions-AddUserAccess
+
+      - name: Configure kubectl
+        run: |
+          aws eks update-kubeconfig \
+            --region ${{ secrets.AWS_REGION }} \
+            --name smart-workshop-dev-cluster
+
+      - name: Get User ID and Account ID
+        id: get-user-id
+        run: |
+          USER_ARN="${{ github.event.inputs.user_arn }}"
+          USER_NAME=$(echo $USER_ARN | awk -F'/' '{print $NF}')
+          
+          # Obter User ID e Account ID da AWS
+          USER_ID=$(aws iam get-user --user-name $USER_NAME --query 'User.UserId' --output text)
+          ACCOUNT_ID=$(aws sts get-caller-identity --query 'Account' --output text)
+          
+          echo "user_arn=$USER_ARN" >> $GITHUB_OUTPUT
+          echo "user_name=$USER_NAME" >> $GITHUB_OUTPUT
+          echo "user_id=$USER_ID" >> $GITHUB_OUTPUT
+          echo "account_id=$ACCOUNT_ID" >> $GITHUB_OUTPUT
+
+      - name: Check existing aws-auth ConfigMap
+        id: check-configmap
+        run: |
+          if kubectl get configmap aws-auth -n kube-system &> /dev/null; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "✅ ConfigMap aws-auth já existe"
+            kubectl get configmap aws-auth -n kube-system -o yaml
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "⚠️  ConfigMap aws-auth não existe, será criado"
+          fi
+
+      - name: Create or Update aws-auth ConfigMap
+        run: |
+          cat << EOF | kubectl apply -f -
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: aws-auth
+            namespace: kube-system
+          data:
+            mapRoles: |
+              - rolearn: arn:aws:iam::${{ steps.get-user-id.outputs.account_id }}:role/smart-workshop-dev-fargate-pod-execution-role
+                username: system:node:{{SessionName}}
+                groups:
+                - system:bootstrappers
+                - system:nodes
+                - system:node-proxier
+              - rolearn: ${{ secrets.AWS_ROLE_ARN }}
+                username: github-actions
+                groups:
+                - system:masters
+            mapUsers: |
+              - userarn: ${{ steps.get-user-id.outputs.user_arn }}
+                username: ${{ steps.get-user-id.outputs.user_id }}
+                groups:
+                - system:masters
+          EOF
+
+      - name: Verify ConfigMap
+        run: |
+          echo "======================================"
+          echo "  ✅ ConfigMap aplicado com sucesso!"
+          echo "======================================"
+          echo ""
+          kubectl get configmap aws-auth -n kube-system -o yaml
+          echo ""
+          echo "======================================"
+          echo "  📋 Próximos passos:"
+          echo "======================================"
+          echo ""
+          echo "1. Execute localmente:"
+          echo "   aws eks update-kubeconfig --region us-west-2 --name smart-workshop-dev-cluster"
+          echo ""
+          echo "2. Teste o acesso:"
+          echo "   kubectl get nodes"
+          echo "   kubectl get pods -n smart-workshop"
+          echo ""
+          echo "3. Obtenha a URL da API:"
+          echo "   ./scripts/get-api-info.sh"
+          echo ""
