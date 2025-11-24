@@ -1,11 +1,12 @@
-# EKS Cluster (mantém o mesmo)
+# EKS Cluster
 resource "aws_eks_cluster" "main" {
   name     = "${var.project_name}-${var.environment}-cluster"
   role_arn = aws_iam_role.eks_cluster_role.arn
   version  = var.cluster_version
 
   vpc_config {
-    subnet_ids              = var.subnet_ids
+    # Control plane needs public subnets for API endpoint
+    subnet_ids              = concat(data.aws_subnets.public.ids, [aws_subnet.private_1.id, aws_subnet.private_2.id])
     endpoint_private_access = true
     endpoint_public_access  = true
     security_group_ids      = [aws_security_group.eks_cluster.id]

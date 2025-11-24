@@ -17,16 +17,24 @@ data "aws_vpc" "selected" {
   id = var.vpc_id
 }
 
-# Data source for subnets
-data "aws_subnets" "selected" {
+# Data source for public subnets (for EKS control plane)
+data "aws_subnets" "public" {
   filter {
     name   = "vpc-id"
     values = [var.vpc_id]
   }
 
   filter {
-    name   = "subnet-id"
-    values = var.subnet_ids
+    name   = "map-public-ip-on-launch"
+    values = ["true"]
+  }
+}
+
+# Data source for selected subnets details
+data "aws_subnets" "selected" {
+  filter {
+    name   = "vpc-id"
+    values = [var.vpc_id]
   }
 }
 
