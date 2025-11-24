@@ -202,7 +202,25 @@ aws s3api put-public-access-block \
 
 Acesse: **GitHub Repository → Settings → Secrets and variables → Actions → New repository secret**
 
-### 4.1. Secrets necessários
+### 4.1. Script automatizado (Recomendado)
+
+Para facilitar, use o script que obtém todos os valores automaticamente:
+
+```bash
+# Executar script
+./scripts/get-aws-values.sh
+
+# O script irá:
+# 1. Buscar VPC_ID automaticamente
+# 2. Buscar SUBNET_IDS (2 subnets privadas em AZs diferentes)
+# 3. Buscar RDS_ENDPOINT
+# 4. Gerar JWT_SECRET_KEY
+# 5. Obter AWS_ROLE_ARN
+# 6. Exibir todos os valores formatados
+# 7. Salvar em /tmp/github-secrets.txt
+```
+
+### 4.2. Secrets necessários
 
 | Secret Name | Valor | Descrição |
 |------------|-------|-----------|
@@ -211,18 +229,84 @@ Acesse: **GitHub Repository → Settings → Secrets and variables → Actions �
 | `TF_STATE_BUCKET` | `smart-workshop-infrastructure-terraform-state` | Bucket do Terraform state |
 | `TF_STATE_KEY` | `dev/terraform.tfstate` | Caminho do state file |
 | `TF_STATE_REGION` | `us-west-2` | Região do bucket |
-| `DB_HOST` | `seu-rds-endpoint.us-west-2.rds.amazonaws.com` | Endpoint do RDS MySQL |
-| `DB_PORT` | `3306` | Porta do MySQL |
-| `DB_NAME` | `smartworkshop` | Nome do banco de dados |
-| `DB_USER` | `admin` | Usuário do banco |
+| `VPC_ID` | `vpc-00bb83a83a9813240` | ID da VPC (mesmo da infra de database) |
+| `SUBNET_IDS` | `["subnet-xxx","subnet-yyy"]` | Array JSON com 2+ subnet IDs (AZs diferentes) ⚠️ |
+| `RDS_ENDPOINT` | `seu-rds-endpoint.us-west-2.rds.amazonaws.com` | Endpoint do RDS MySQL |
 | `DB_PASSWORD` | `sua-senha-segura` | Senha do banco (⚠️ NUNCA commitar!) |
+| `JWT_SECRET_KEY` | `sua-chave-jwt-secreta` | Chave secreta para JWT da API |
 
-### 4.2. Como adicionar cada secret
+**⚠️ IMPORTANTE:** O valor de `SUBNET_IDS` deve ser um **array JSON válido**:
+- ✅ Correto: `["subnet-0abc123","subnet-0def456"]`
+- ❌ Errado: `subnet-0abc123,subnet-0def456`
+- ❌ Errado: `['subnet-0abc123','subnet-0def456']` (aspas simples)
+
+### 4.3. Como obter os valores dos secrets (Manual)
+
+#### VPC_ID e SUBNET_IDS (da infraestrutura de database)
+
+```bash
+# Obter VPC ID
+aws ec2 describe-vpcs --filters "Name=tag:Name,Values=smart-workshop-*" --query 'Vpcs[0].VpcId' --output text
+
+# Listar TODAS as subnets da VPC (com detalhes)
+aws ec2 describe-subnets \
+  --filters "Name=vpc-id,Values=vpc-00bb83a83a9813240" \
+  --query 'Subnets[*].[SubnetId,AvailabilityZone,CidrBlock,Tags[?Key==`Name`].Value|[0]]' \
+  --output table
+
+# Gerar formato JSON correto para SUBNET_IDS (primeiras 2 subnets):
+aws ec2 describe-subnets \
+  --filters "Name=vpc-id,Values=vpc-00bb83a83a9813240" \
+  --query 'Subnets[0:2].SubnetId' \
+  --output json | jq -c .
+
+# Exemplo de output (copie exatamente assim):
+# ["subnet-0abc123def456","subnet-0xyz789ghi012"]
+
+# ⚠️ IMPORTANTE: Escolha 2 subnets em AZs DIFERENTES (ex: us-west-2a e us-west-2b)
+```
+
+**⚠️ IMPORTANTE:** Copie o output do comando acima **EXATAMENTE** como aparece, incluindo os colchetes e aspas duplas!
+
+#### RDS_ENDPOINT
+
+```bash
+# Obter endpoint do RDS
+aws rds describe-db-instances \
+  --db-instance-identifier smart-workshop-db \
+  --query 'DBInstances[0].Endpoint.Address' \
+  --output text
+```
+
+#### JWT_SECRET_KEY
+
+```bash
+# Gerar uma chave segura aleatória
+openssl rand -base64 32
+```
+
+### 4.4. Como adicionar cada secret
 
 1. Clique em **New repository secret**
 2. Preencha **Name** e **Secret**
 3. Clique em **Add secret**
 4. Repita para todos os secrets acima
+
+**Exemplo prático:**
+
+```
+Name:   SUBNET_IDS
+Secret: ["subnet-0abc123def456789","subnet-0xyz789ghi012345"]
+        ↑ Copie EXATAMENTE assim, com colchetes e aspas duplas
+
+Name:   VPC_ID  
+Secret: vpc-00bb83a83a9813240
+        ↑ Apenas o ID, sem aspas
+
+Name:   RDS_ENDPOINT
+Secret: smart-workshop-db.abc123.us-west-2.rds.amazonaws.com
+        ↑ Apenas o hostname, sem porta ou protocolo
+```
 
 ---
 
@@ -359,9 +443,10 @@ Antes de rodar o deploy, confirme:
 
 - [ ] OIDC Provider criado na AWS
 - [ ] IAM Role `GitHubActionsEKSRole` criada
-- [ ] Policies anexadas à role (EKS, EC2, IAM, Fargate)
+- [ ] Policies anexadas à role (EKS, EC2, IAM, Fargate, S3)
 - [ ] S3 Bucket criado com versionamento e criptografia
-- [ ] Todos os 9 secrets configurados no GitHub
+- [ ] Todos os 10 secrets configurados no GitHub
+- [ ] VPC_ID e SUBNET_IDS obtidos da infraestrutura de database
 - [ ] Trust policy da role aponta para o repositório correto
 - [ ] Workflows commitados e pushed para o repositório
 - [ ] Permissões do GitHub Actions configuradas (read/write)

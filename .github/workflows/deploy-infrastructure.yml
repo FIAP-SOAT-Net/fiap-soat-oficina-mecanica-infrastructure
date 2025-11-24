@@ -52,28 +52,27 @@ jobs:
         working-directory: ./terraform
         run: terraform init
 
+      - name: Create terraform.tfvars
+        working-directory: ./terraform
+        run: |
+          cat > terraform.tfvars << EOF
+          vpc_id         = "${{ secrets.VPC_ID }}"
+          subnet_ids     = ${{ secrets.SUBNET_IDS }}
+          rds_endpoint   = "${{ secrets.RDS_ENDPOINT }}"
+          db_password    = "${{ secrets.DB_PASSWORD }}"
+          jwt_secret_key = "${{ secrets.JWT_SECRET_KEY }}"
+          EOF
+
       - name: Terraform Validate
         working-directory: ./terraform
         run: terraform validate
 
       - name: Terraform Plan
         working-directory: ./terraform
-        env:
-          TF_VAR_vpc_id: ${{ secrets.VPC_ID }}
-          TF_VAR_subnet_ids: ${{ secrets.SUBNET_IDS }}
-          TF_VAR_rds_endpoint: ${{ secrets.RDS_ENDPOINT }}
-          TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
-          TF_VAR_jwt_secret_key: ${{ secrets.JWT_SECRET_KEY }}
         run: terraform plan -out=tfplan
 
       - name: Terraform Apply
         working-directory: ./terraform
-        env:
-          TF_VAR_vpc_id: ${{ secrets.VPC_ID }}
-          TF_VAR_subnet_ids: ${{ secrets.SUBNET_IDS }}
-          TF_VAR_rds_endpoint: ${{ secrets.RDS_ENDPOINT }}
-          TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
-          TF_VAR_jwt_secret_key: ${{ secrets.JWT_SECRET_KEY }}
         run: terraform apply -auto-approve tfplan
 
       - name: Get EKS Cluster Name
