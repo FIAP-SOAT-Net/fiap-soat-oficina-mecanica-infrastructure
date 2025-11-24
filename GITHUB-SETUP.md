@@ -432,6 +432,56 @@ aws iam get-role --role-name GitHubActionsEKSRole
 aws iam get-role --role-name GitHubActionsEKSRole --query 'Role.AssumeRolePolicyDocument'
 ```
 
+### Erro: "Pods não iniciam" ou "ImagePullBackOff"
+
+**Causa:** Imagem Docker não acessível ou não existe
+
+**Solução:**
+
+#### Opção 1: Tornar a imagem pública no GitHub
+
+1. Acesse: **GitHub → Packages → fiap-soat-oficina-mecanica**
+2. Clique em **Package settings**
+3. Em **Danger Zone**, clique em **Change visibility → Public**
+
+#### Opção 2: Criar imagePullSecret (imagem privada)
+
+```bash
+# Criar Personal Access Token (PAT) no GitHub
+# Settings → Developer settings → Personal access tokens → Tokens (classic)
+# Permissões: read:packages
+
+# Criar secret no Kubernetes
+kubectl create secret docker-registry ghcr-secret \
+  --docker-server=ghcr.io \
+  --docker-username=<GITHUB_USERNAME> \
+  --docker-password=<GITHUB_PAT> \
+  --docker-email=<EMAIL> \
+  -n smart-workshop
+
+# Adicionar ao deployment (k8s/api/deployment.yaml):
+spec:
+  template:
+    spec:
+      imagePullSecrets:
+      - name: ghcr-secret
+      containers:
+      - name: api
+        ...
+```
+
+#### Opção 3: Usar imagem de exemplo (para testes)
+
+Edite `k8s/api/deployment.yaml` e substitua a imagem por uma de teste:
+
+```yaml
+containers:
+- name: api
+  image: nginx:alpine  # Temporário para testar
+  ports:
+  - containerPort: 80  # Nginx usa porta 80
+```
+
 ### Erro: "Backend initialization failed"
 
 **Causa:** Bucket S3 não existe ou sem permissão

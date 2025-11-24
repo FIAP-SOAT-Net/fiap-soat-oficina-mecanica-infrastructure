@@ -105,9 +105,39 @@ jobs:
           kubectl apply -f k8s/mailhog/deployment.yaml
           kubectl apply -f k8s/mailhog/service.yaml
 
+      - name: Check Deployment Status
+        run: |
+          echo "=== Checking Fargate Nodes ==="
+          kubectl get nodes -o wide
+          
+          echo ""
+          echo "=== Checking Pods Status ==="
+          kubectl get pods -n smart-workshop -o wide
+          
+          echo ""
+          echo "=== Checking Pod Events ==="
+          kubectl get events -n smart-workshop --sort-by='.lastTimestamp'
+          
+          echo ""
+          echo "=== Describing API Deployment ==="
+          kubectl describe deployment api-deployment -n smart-workshop || true
+          
+          echo ""
+          echo "=== API Pod Logs (if exists) ==="
+          kubectl logs -n smart-workshop -l app=api --tail=50 || echo "No API pods running yet"
+
       - name: Wait for Deployments
         run: |
-          kubectl wait --for=condition=available --timeout=300s deployment/api-deployment -n smart-workshop
+          echo "Waiting for API deployment..."
+          kubectl wait --for=condition=available --timeout=600s deployment/api-deployment -n smart-workshop || {
+            echo "API deployment failed. Checking pod status..."
+            kubectl get pods -n smart-workshop
+            kubectl describe pods -n smart-workshop -l app=api
+            kubectl logs -n smart-workshop -l app=api --tail=100 || true
+            exit 1
+          }
+          
+          echo "Waiting for MailHog deployment..."
           kubectl wait --for=condition=available --timeout=300s deployment/mailhog-deployment -n smart-workshop
 
       - name: Get Service Endpoints
