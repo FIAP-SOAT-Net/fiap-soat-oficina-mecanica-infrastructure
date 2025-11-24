@@ -89,7 +89,7 @@ variable "db_password" {
 variable "api_image" {
   description = "Docker image for API"
   type        = string
-  default     = "ghcr.io/fiap-soat-net/fiap-soat-oficina-mecanica:latest"
+  default     = "igortessaro/smart-mechanical-workshop-api:latest"
 }
 
 variable "api_replicas" {

@@ -246,7 +246,7 @@ db_username = "admin"
 db_password = "SuaSenhaSegura123!"  # ⚠️ Usar AWS Secrets Manager
 
 # API Configuration
-api_image = "ghcr.io/fiap-soat-net/fiap-soat-oficina-mecanica:latest"
+api_image = "igortessaro/smart-mechanical-workshop-api:latest"
 api_replicas = 2
 
 # Tags

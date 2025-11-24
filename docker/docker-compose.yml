@@ -3,7 +3,7 @@ version: '3.8'
 services:
   # API .NET
   api:
-    image: ghcr.io/fiap-soat-net/fiap-soat-oficina-mecanica:latest
+    image: igortessaro/smart-mechanical-workshop-api:latest
     container_name: smart-workshop-api
     ports:
       - "5180:5180"

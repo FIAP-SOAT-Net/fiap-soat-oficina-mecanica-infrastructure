@@ -27,7 +27,7 @@ db_username  = "admin"
 db_password  = "YourSecurePassword123!"  # ⚠️ Use AWS Secrets Manager or environment variable
 
 # Application Configuration (FREE TIER OPTIMIZED)
-api_image          = "ghcr.io/fiap-soat-net/fiap-soat-oficina-mecanica:latest"
+api_image          = "igortessaro/smart-mechanical-workshop-api:latest"
 api_replicas       = 1                # FREE TIER: 1 replica inicial
 api_cpu_request    = "100m"           # Reduzido para t3.small
 api_memory_request = "256Mi"          # Reduzido para t3.small

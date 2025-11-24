@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
       - name: api
-        image: ghcr.io/fiap-soat-net/fiap-soat-oficina-mecanica:latest
+        image: igortessaro/smart-mechanical-workshop-api:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 5180
