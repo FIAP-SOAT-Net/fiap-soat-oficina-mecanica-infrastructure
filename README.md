@@ -4,7 +4,7 @@ Infraestrutura como Código (IaC) para o projeto Smart Mechanical Workshop da FI
 
 [![Terraform](https://img.shields.io/badge/Terraform-1.5+-844FBA?logo=terraform)](https://www.terraform.io/)
 [![AWS](https://img.shields.io/badge/AWS-EKS-FF9900?logo=amazonaws)](https://aws.amazon.com/eks/)
-[![Kubernetes](https://img.shields.io/badge/Kubernetes-1.28+-326CE5?logo=kubernetes)](https://kubernetes.io/)
+[![Kubernetes](https://img.shields.io/badge/Kubernetes-1.31+-326CE5?logo=kubernetes)](https://kubernetes.io/)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker)](https://www.docker.com/)
 
 ## 📋 Índice
@@ -47,7 +47,7 @@ Este repositório gerencia toda a infraestrutura necessária para executar o sis
 #### Para Deploy na AWS:
 - [AWS CLI](https://aws.amazon.com/cli/) 2.x configurado
 - [Terraform](https://www.terraform.io/downloads) 1.5+
-- [kubectl](https://kubernetes.io/docs/tasks/tools/) 1.28+
+- [kubectl](https://kubernetes.io/docs/tasks/tools/) 1.31+
 - [Helm](https://helm.sh/docs/intro/install/) 3.x (opcional)
 - Conta AWS com permissões adequadas
 
@@ -174,7 +174,7 @@ Siga os passos abaixo na ordem correta.
 │  │                    VPC (us-west-2)                         │ │
 │  │                                                             │ │
 │  │  ┌──────────────────────────────────────────────────────┐ │ │
-│  │  │              EKS Cluster (1.28+)                      │ │ │
+│  │  │              EKS Cluster (1.31)                       │ │ │
 │  │  │                                                        │ │ │
 │  │  │  ┌─────────────────┐      ┌─────────────────┐       │ │ │
 │  │  │  │  API Pods       │      │  MailHog Pod    │       │ │ │
