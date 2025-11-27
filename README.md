@@ -152,6 +152,18 @@ docker-compose down -v
 
 ## ☁️ Ambiente AWS (Dev)
 
+> 📖 **Guia Rápido**: Ver [SETUP-QUICKSTART.md](./SETUP-QUICKSTART.md) para um checklist resumido dos passos de configuração.
+
+### Pré-requisitos AWS
+
+Antes de começar o deploy, você precisa configurar:
+
+1. ✅ **Backend do Terraform** (Bucket S3 + DynamoDB)
+2. ✅ **IAM Role para GitHub Actions** (com permissões adequadas)
+3. ✅ **Secrets no GitHub** (credenciais e configurações)
+
+Siga os passos abaixo na ordem correta.
+
 ### Arquitetura
 
 ```
@@ -194,85 +206,89 @@ docker-compose down -v
 
 ### Passo 1: Configurar Backend Terraform (Apenas uma vez)
 
-Antes de provisionar a infraestrutura, configure o backend S3 para armazenar o estado do Terraform:
+O backend do Terraform armazena o estado da infraestrutura no S3 com lock no DynamoDB.
 
 ```bash
-cd terraform
-
-# Editar backend.tf com informações do bucket S3
-# (Pode usar o mesmo bucket do repositório database)
-
-terraform init
+# Executar script de setup (cria bucket S3 e tabela DynamoDB)
+./scripts/setup-terraform-backend.sh
 ```
 
-### Passo 2: Configurar Variáveis
+**O que o script cria:**
+- 🪣 **Bucket S3**: `smart-workshop-infrastructure-terraform-state`
+  - Versionamento habilitado
+  - Encriptação AES256
+  - Acesso público bloqueado
+- 🔐 **Tabela DynamoDB**: `smart-workshop-terraform-locks`
+  - Lock distribuído para operações Terraform
+  - Billing mode: Pay-per-request
+
+💰 **Custo estimado**: ~$0.50/mês
+
+---
+
+### Passo 2: Configurar IAM Role para GitHub Actions (Apenas uma vez)
+
+O GitHub Actions usa OIDC (OpenID Connect) para autenticar na AWS sem precisar de credenciais estáticas (mais seguro).
 
 ```bash
-# Copiar exemplo de variáveis
-cp terraform.tfvars.example terraform.tfvars
-
-# Editar com suas configurações
-nano terraform.tfvars
+# Executar script de setup da role IAM
+./scripts/setup-github-actions-role.sh
 ```
 
-**Exemplo de `terraform.tfvars`:**
+**O que o script configura:**
 
-```hcl
-# Região AWS
-aws_region = "us-west-2"
+1. 🔐 **OIDC Provider**: Confiança entre GitHub e AWS
+2. 👤 **IAM Role**: `GitHubActionsEKSRole`
+3. 📋 **Políticas anexadas**:
+   - `TerraformStateAccessPolicy` - Acesso ao S3 e DynamoDB
+   - `EKSFullAccessPolicy` - Gerenciar cluster EKS
+   - `AmazonEC2FullAccess` - Gerenciar instâncias EC2
+   - `IAMFullAccess` - Criar roles e policies
+   - `AmazonVPCFullAccess` - Gerenciar rede
+   - `ElasticLoadBalancingFullAccess` - Gerenciar Load Balancers
 
-# Ambiente
-environment  = "dev"
-project_name = "smart-workshop"
+**⚠️ Importante**: Anote o **Role ARN** que aparece no final da execução. Você vai precisar no próximo passo.
 
-# Cluster EKS
-cluster_version = "1.28"
-node_instance_types = ["t3.medium"]
-node_desired_size = 2
-node_min_size = 2
-node_max_size = 5
-
-# Rede (do RDS existente)
-vpc_id = "vpc-xxxxx"  # Obter do RDS
-subnet_ids = [
-  "subnet-xxxxx",  # us-west-2a
-  "subnet-yyyyy",  # us-west-2b
-]
-
-# RDS Connection (do repositório database)
-rds_endpoint = "smart-workshop-dev-db.xxxxx.us-west-2.rds.amazonaws.com"
-db_name = "smart_workshop"
-db_username = "admin"
-db_password = "SuaSenhaSegura123!"  # ⚠️ Usar AWS Secrets Manager
-
-# API Configuration
-api_image = "igortessaro/smart-mechanical-workshop-api:latest"
-api_replicas = 2
-
-# Tags
-tags = {
-  Environment = "dev"
-  Project     = "smart-workshop"
-  ManagedBy   = "terraform"
-}
+Exemplo de output:
 ```
+Role ARN (adicione como secret AWS_ROLE_ARN):
+arn:aws:iam::243100982781:role/GitHubActionsEKSRole
+```
+
+💰 **Custo**: $0.00 (roles IAM não têm custo)
+
+---
 
 ### Passo 3: Configurar Secrets no GitHub
 
-Configure os seguintes secrets no repositório GitHub (Settings → Secrets and variables → Actions):
+Acesse o repositório no GitHub e configure os secrets:
 
-| Secret | Descrição | Exemplo |
-|--------|-----------|---------|
-| `AWS_ROLE_ARN` | ARN da role IAM para OIDC | `arn:aws:iam::243100982781:role/GitHubActionsRole` |
+**Caminho**: `Settings` → `Secrets and variables` → `Actions` → `New repository secret`
+
+| Secret Name | Descrição | Exemplo / Como obter |
+|-------------|-----------|---------------------|
+| `AWS_ROLE_ARN` | ARN da role IAM para OIDC | Obtido no Passo 2 (ex: `arn:aws:iam::243100982781:role/GitHubActionsEKSRole`) |
 | `AWS_REGION` | Região AWS | `us-west-2` |
-| `DB_PASSWORD` | Senha do banco RDS | `MinhaSenh@Segura123!` |
-| `VPC_ID` | ID da VPC | `vpc-0abc123def456` |
-| `SUBNET_IDS` | IDs das subnets (JSON) | `["subnet-abc123", "subnet-def456"]` |
-| `RDS_ENDPOINT` | Endpoint do RDS | `smart-workshop-dev-db.xxxxx.rds.amazonaws.com` |
+| `DB_PASSWORD` | Senha do banco RDS | Ver [repositório database](https://github.com/FIAP-SOAT-Net/fiap-soat-oficina-mecanica-infrastructure-database) |
+| `RDS_ENDPOINT` | Endpoint do RDS MySQL | Ex: `smart-workshop-dev-db.xxxxx.us-west-2.rds.amazonaws.com` |
 
-### Passo 4: Deploy via GitHub Actions
+**Como obter o RDS_ENDPOINT**:
+```bash
+aws rds describe-db-instances \
+  --db-instance-identifier smart-workshop-dev-db \
+  --query 'DBInstances[0].Endpoint.Address' \
+  --output text
+```
 
-**Opção A: Via Interface do GitHub (Recomendado)**
+---
+
+### Passo 4: Deploy via GitHub Actions (Recomendado)
+
+---
+
+### Passo 4: Deploy via GitHub Actions (Recomendado)
+
+Com todos os secrets configurados, faça o deploy automático:
 
 1. Acesse o repositório no GitHub
 2. Vá em **Actions** → **🚀 Deploy Infrastructure**
@@ -280,10 +296,25 @@ Configure os seguintes secrets no repositório GitHub (Settings → Secrets and 
 4. Selecione a branch `main`
 5. Aguarde ~15-20 minutos
 
-**Opção B: Deploy Local via Terraform**
+**O workflow irá**:
+- ✅ Autenticar na AWS via OIDC (sem credenciais estáticas)
+- ✅ Inicializar Terraform com backend S3
+- ✅ Criar cluster EKS com Fargate
+- ✅ Instalar AWS Load Balancer Controller
+- ✅ Fazer deploy da API e MailHog
+- ✅ Configurar auto-scaling (HPA)
+
+---
+
+### Alternativa: Deploy Local via Terraform
+
+Se preferir executar localmente:
 
 ```bash
 cd terraform
+
+# Inicializar (já foi feito no Passo 1)
+terraform init
 
 # Validar configuração
 terraform validate
@@ -310,6 +341,8 @@ kubectl get pods -n smart-workshop
 # Pegar endpoints externos
 kubectl get svc -n smart-workshop
 ```
+
+---
 
 ### Passo 5: Acessar Serviços na AWS
 
