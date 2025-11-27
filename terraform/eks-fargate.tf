@@ -40,6 +40,33 @@ resource "aws_security_group" "eks_cluster" {
   description = "Security group for EKS cluster"
   vpc_id      = var.vpc_id
 
+  # Allow inbound traffic from anywhere on port 5180 (API)
+  ingress {
+    from_port   = 5180
+    to_port     = 5180
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+    description = "Allow API traffic"
+  }
+
+  # Allow inbound traffic from anywhere on port 8025 (MailHog)
+  ingress {
+    from_port   = 8025
+    to_port     = 8025
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+    description = "Allow MailHog traffic"
+  }
+
+  # Allow all traffic within the security group (for pod-to-pod communication)
+  ingress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    self        = true
+    description = "Allow internal cluster communication"
+  }
+
   egress {
     from_port   = 0
     to_port     = 0
