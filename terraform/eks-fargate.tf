@@ -40,33 +40,6 @@ resource "aws_security_group" "eks_cluster" {
   description = "Security group for EKS cluster"
   vpc_id      = var.vpc_id
 
-  # Allow inbound traffic from anywhere on port 5180 (API)
-  ingress {
-    from_port   = 5180
-    to_port     = 5180
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-    description = "Allow API traffic"
-  }
-
-  # Allow inbound traffic from anywhere on port 8025 (MailHog)
-  ingress {
-    from_port   = 8025
-    to_port     = 8025
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-    description = "Allow MailHog traffic"
-  }
-
-  # Allow all traffic within the security group (for pod-to-pod communication)
-  ingress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    self        = true
-    description = "Allow internal cluster communication"
-  }
-
   egress {
     from_port   = 0
     to_port     = 0
@@ -81,6 +54,37 @@ resource "aws_security_group" "eks_cluster" {
       Name = "${var.project_name}-${var.environment}-eks-cluster-sg"
     }
   )
+}
+
+# Security Group Rules for EKS Cluster (separate resources to allow updates)
+resource "aws_security_group_rule" "eks_api_ingress" {
+  type              = "ingress"
+  from_port         = 5180
+  to_port           = 5180
+  protocol          = "tcp"
+  cidr_blocks       = ["0.0.0.0/0"]
+  description       = "Allow API traffic"
+  security_group_id = aws_security_group.eks_cluster.id
+}
+
+resource "aws_security_group_rule" "eks_mailhog_ingress" {
+  type              = "ingress"
+  from_port         = 8025
+  to_port           = 8025
+  protocol          = "tcp"
+  cidr_blocks       = ["0.0.0.0/0"]
+  description       = "Allow MailHog traffic"
+  security_group_id = aws_security_group.eks_cluster.id
+}
+
+resource "aws_security_group_rule" "eks_internal_ingress" {
+  type              = "ingress"
+  from_port         = 0
+  to_port           = 0
+  protocol          = "-1"
+  self              = true
+  description       = "Allow internal cluster communication"
+  security_group_id = aws_security_group.eks_cluster.id
 }
 
 # OIDC Provider for EKS
@@ -235,7 +239,7 @@ resource "null_resource" "patch_coredns" {
 resource "aws_eks_addon" "vpc_cni" {
   cluster_name      = aws_eks_cluster.main.name
   addon_name        = "vpc-cni"
-  addon_version     = "v1.15.1-eksbuild.1"
+  addon_version     = "v1.18.1-eksbuild.3"
   resolve_conflicts_on_create = "OVERWRITE"
   resolve_conflicts_on_update = "OVERWRITE"
 
@@ -248,7 +252,7 @@ resource "aws_eks_addon" "vpc_cni" {
 resource "aws_eks_addon" "coredns" {
   cluster_name      = aws_eks_cluster.main.name
   addon_name        = "coredns"
-  addon_version     = "v1.10.1-eksbuild.4"
+  addon_version     = "v1.11.3-eksbuild.1"
   resolve_conflicts_on_create = "OVERWRITE"
   resolve_conflicts_on_update = "OVERWRITE"
 
@@ -264,7 +268,7 @@ resource "aws_eks_addon" "coredns" {
 resource "aws_eks_addon" "kube_proxy" {
   cluster_name      = aws_eks_cluster.main.name
   addon_name        = "kube-proxy"
-  addon_version     = "v1.28.2-eksbuild.2"
+  addon_version     = "v1.31.0-eksbuild.5"
   resolve_conflicts_on_create = "OVERWRITE"
   resolve_conflicts_on_update = "OVERWRITE"
 
