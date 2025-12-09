@@ -1,0 +1,92 @@
+name: 🎯 Deploy API with New Relic
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'k8s/api/**'
+      - '.github/workflows/deploy-api.yml'
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: us-west-2
+  CLUSTER_NAME: smart-workshop-eks-cluster
+
+jobs:
+  deploy-api:
+    name: Deploy API to EKS
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: GitHubActions-DeployAPI
+
+      - name: Configure kubectl
+        run: |
+          aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name ${{ env.CLUSTER_NAME }}
+
+      - name: Create namespace
+        run: |
+          kubectl create namespace smart-workshop --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Create/Update Kubernetes Secrets
+        run: |
+          # API Secret (DB + JWT + New Relic)
+          kubectl create secret generic api-secret \
+            --from-literal=DB_CONNECTION_STRING="server=${{ secrets.RDS_ENDPOINT }};port=3306;database=smart_workshop;user=admin;password=${{ secrets.DB_PASSWORD }};SslMode=Required;" \
+            --from-literal=JWT_SECRET_KEY="${{ secrets.JWT_SECRET_KEY }}" \
+            --from-literal=NEW_RELIC_LICENSE_KEY="${{ secrets.NEW_RELIC_LICENSE_KEY }}" \
+            --namespace=smart-workshop \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Apply ConfigMap
+        run: |
+          kubectl apply -f k8s/api/configmap.yaml
+
+      - name: Apply Deployment
+        run: |
+          kubectl apply -f k8s/api/deployment.yaml
+
+      - name: Apply Service
+        run: |
+          kubectl apply -f k8s/api/service.yaml
+
+      - name: Apply HPA (if exists)
+        run: |
+          if [ -f k8s/api/hpa.yaml ]; then
+            kubectl apply -f k8s/api/hpa.yaml
+          fi
+
+      - name: Wait for rollout
+        run: |
+          kubectl rollout status deployment/api-deployment -n smart-workshop --timeout=5m
+
+      - name: Verify deployment
+        run: |
+          kubectl get pods -n smart-workshop -l app=api
+          kubectl get svc -n smart-workshop -l app=api
+
+      - name: Get API endpoint
+        run: |
+          API_URL=$(kubectl get svc api-service -n smart-workshop -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+          echo "::notice title=API Endpoint::http://${API_URL}:5180"
+
+      - name: Verify New Relic connection
+        run: |
+          echo "Waiting 30s for New Relic agent to connect..."
+          sleep 30
+          POD_NAME=$(kubectl get pods -n smart-workshop -l app=api -o jsonpath='{.items[0].metadata.name}')
+          echo "Checking logs for New Relic connection:"
+          kubectl logs $POD_NAME -n smart-workshop --tail=50 | grep -i "new relic" || echo "No New Relic logs found (may be normal)"

@@ -1,0 +1,90 @@
+name: 📊 Deploy New Relic K8s Integration
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action to perform'
+        required: true
+        type: choice
+        options:
+          - deploy
+          - remove
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: us-west-2
+  CLUSTER_NAME: smart-workshop-eks-cluster
+
+jobs:
+  deploy-k8s-integration:
+    name: Deploy New Relic Kubernetes Integration
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: GitHubActions-NewRelicK8s
+
+      - name: Configure kubectl
+        run: |
+          aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name ${{ env.CLUSTER_NAME }}
+
+      - name: Create New Relic namespace
+        if: github.event.inputs.action == 'deploy'
+        run: |
+          kubectl create namespace newrelic --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Create New Relic Secret
+        if: github.event.inputs.action == 'deploy'
+        run: |
+          kubectl create secret generic newrelic-bundle-newrelic-infrastructure-config \
+            --from-literal=license="${{ secrets.NEW_RELIC_LICENSE_KEY }}" \
+            --from-literal=cluster="${{ env.CLUSTER_NAME }}" \
+            --namespace=newrelic \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Deploy New Relic K8s Integration
+        if: github.event.inputs.action == 'deploy'
+        run: |
+          kubectl apply -f k8s/observability/newrelic-kubernetes-integration.yaml
+
+      - name: Wait for DaemonSet to be ready
+        if: github.event.inputs.action == 'deploy'
+        run: |
+          kubectl rollout status daemonset/newrelic-infrastructure -n newrelic --timeout=5m
+
+      - name: Wait for KSM deployment to be ready
+        if: github.event.inputs.action == 'deploy'
+        run: |
+          kubectl rollout status deployment/newrelic-kube-state-metrics -n newrelic --timeout=3m
+
+      - name: Verify installation
+        if: github.event.inputs.action == 'deploy'
+        run: |
+          echo "=== New Relic Pods ==="
+          kubectl get pods -n newrelic
+          
+          echo ""
+          echo "=== DaemonSet Status ==="
+          kubectl get daemonset -n newrelic
+          
+          echo ""
+          echo "=== Checking logs ==="
+          POD_NAME=$(kubectl get pods -n newrelic -l app=newrelic-infrastructure -o jsonpath='{.items[0].metadata.name}')
+          kubectl logs $POD_NAME -n newrelic --tail=20
+
+      - name: Remove New Relic Integration
+        if: github.event.inputs.action == 'remove'
+        run: |
+          kubectl delete -f k8s/observability/newrelic-kubernetes-integration.yaml || true
+          kubectl delete namespace newrelic || true

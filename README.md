@@ -1,17 +1,19 @@
 # 🏗️ Oficina Mecânica Inteligente - Infraestrutura
 
-Infraestrutura como Código (IaC) para o projeto Smart Mechanical Workshop da FIAP/SOAT, incluindo ambiente local Docker e infraestrutura AWS com EKS.
+Infraestrutura como Código (IaC) para o projeto Smart Mechanical Workshop da FIAP/SOAT, incluindo ambiente local Docker, infraestrutura AWS com EKS e observabilidade com New Relic.
 
 [![Terraform](https://img.shields.io/badge/Terraform-1.5+-844FBA?logo=terraform)](https://www.terraform.io/)
 [![AWS](https://img.shields.io/badge/AWS-EKS-FF9900?logo=amazonaws)](https://aws.amazon.com/eks/)
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-1.31+-326CE5?logo=kubernetes)](https://kubernetes.io/)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker)](https://www.docker.com/)
+[![New Relic](https://img.shields.io/badge/New_Relic-Observability-1CE783?logo=newrelic)](https://newrelic.com/)
 
 ## 📋 Índice
 
 - [Visão Geral](#-visão-geral)
 - [Pré-requisitos](#-pré-requisitos)
 - [Estrutura do Projeto](#-estrutura-do-projeto)
+- [Observabilidade (New Relic)](#-observabilidade-new-relic) ⭐ **NOVO**
 - [Ambiente Local](#-ambiente-local)
 - [Ambiente AWS (Dev)](#-ambiente-aws-dev)
 - [Pipelines CI/CD](#-pipelines-cicd)
@@ -34,6 +36,16 @@ Este repositório gerencia toda a infraestrutura necessária para executar o sis
 - **RDS MySQL** - Banco de dados gerenciado (provisionado pelo [repositório database](https://github.com/FIAP-SOAT-Net/fiap-soat-oficina-mecanica-infrastructure-database))
 - **Auto Scaling** - HPA (Horizontal Pod Autoscaler)
 - **Load Balancer** - Exposição dos serviços
+
+### 3. **Observabilidade (New Relic)** ⭐
+- **APM Agent** - Monitoramento de performance da aplicação
+- **Kubernetes Integration** - Métricas de CPU, memória, pods
+- **Custom Business Metrics** - Volume de ordens, tempo por fase, conversão
+- **Dashboards** - 4 páginas com 30+ widgets
+- **Alertas** - 9 alertas inteligentes configurados
+- **Logs Estruturados** - JSON com correlation IDs
+
+📚 **[Ver Guia Completo de Observabilidade](./NEW_RELIC_GUIDE.md)**
 
 ## ✅ Pré-requisitos
 
@@ -68,7 +80,10 @@ fiap-soat-oficina-mecanica-infrastructure/
 │   └── workflows/                      # GitHub Actions Workflows
 │       ├── deploy-infrastructure.yml   # Deploy completo na AWS
 │       ├── destroy-infrastructure.yml  # Destroy completo da AWS
-│       └── start-stop-scheduler.yml    # Agendamento start/stop
+│       ├── start-stop-scheduler.yml    # Agendamento start/stop
+│       ├── deploy-api.yml              # Deploy API com New Relic ⭐
+│       ├── deploy-newrelic.yml         # Deploy dashboards/alertas ⭐
+│       └── deploy-newrelic-k8s.yml     # Deploy K8s Integration ⭐
 │
 ├── docker/                             # Ambiente Local
 │   ├── docker-compose.yml              # Compose para dev local
@@ -82,10 +97,45 @@ fiap-soat-oficina-mecanica-infrastructure/
 │   ├── versions.tf                     # Versões de providers
 │   ├── eks.tf                          # Cluster EKS
 │   ├── iam.tf                          # Roles e policies
-│   └── terraform.tfvars.example        # Exemplo de variáveis
+│   ├── terraform.tfvars.example        # Exemplo de variáveis
+│   ├── newrelic-example.tf             # Exemplo de uso New Relic ⭐
+│   └── modules/
+│       └── newrelic-observability/     # Módulo Terraform ⭐
+│           ├── providers.tf
+│           ├── variables.tf
+│           ├── dashboards.tf           # 4 páginas de dashboards
+│           ├── alerts.tf               # 9 alertas
+│           ├── outputs.tf
+│           └── README.md
 │
 ├── k8s/                                # Manifestos Kubernetes
 │   ├── api/
+│   │   ├── configmap.yaml              # Configs (com New Relic) ⭐
+│   │   ├── deployment.yaml             # Deploy (com New Relic) ⭐
+│   │   ├── secret.yaml.example         # Secrets (com NR License) ⭐
+│   │   ├── service.yaml
+│   │   └── hpa.yaml
+│   ├── mailhog/
+│   │   ├── deployment.yaml
+│   │   └── service.yaml
+│   └── observability/                  # ⭐ NOVO
+│       └── newrelic-kubernetes-integration.yaml  # DaemonSet + KSM
+│
+├── scripts/                            # Scripts auxiliares
+│   ├── setup-terraform-backend.sh
+│   ├── setup-github-actions-role.sh
+│   ├── install-aws-lb-controller.sh
+│   └── get-api-url.sh
+│
+├── docs/                               # Documentação adicional
+│
+├── NEW_RELIC_GUIDE.md                  # ⭐ Guia completo New Relic
+├── NEW_RELIC_QUICKSTART.md             # ⭐ Quick start (15 min)
+├── NRQL_QUERIES.md                     # ⭐ 50+ queries prontas
+├── IMPLEMENTATION_SUMMARY.md           # ⭐ Sumário da implementação
+├── README.md                           # Este arquivo
+└── SETUP-QUICKSTART.md                 # Setup rápido
+```
 │   │   ├── deployment.yaml             # Deployment da API
 │   │   ├── service.yaml                # Service LoadBalancer
 │   │   ├── configmap.yaml              # ConfigMap

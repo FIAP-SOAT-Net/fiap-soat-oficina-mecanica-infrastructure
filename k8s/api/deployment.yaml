@@ -91,6 +91,37 @@ spec:
             configMapKeyRef:
               name: api-config
               key: Jwt__ExpiresInMinutes
+        # New Relic Configuration from ConfigMap
+        - name: NewRelic__Enabled
+          valueFrom:
+            configMapKeyRef:
+              name: api-config
+              key: NewRelic__Enabled
+        - name: NewRelic__AppName
+          valueFrom:
+            configMapKeyRef:
+              name: api-config
+              key: NewRelic__AppName
+        - name: NEW_RELIC_APP_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: api-config
+              key: NEW_RELIC_APP_NAME
+        - name: NEW_RELIC_DISTRIBUTED_TRACING_ENABLED
+          valueFrom:
+            configMapKeyRef:
+              name: api-config
+              key: NEW_RELIC_DISTRIBUTED_TRACING_ENABLED
+        - name: NEW_RELIC_LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: api-config
+              key: NEW_RELIC_LOG_LEVEL
+        - name: NEW_RELIC_LABELS
+          valueFrom:
+            configMapKeyRef:
+              name: api-config
+              key: NEW_RELIC_LABELS
         # Secrets
         - name: ConnectionStrings__DefaultConnection
           valueFrom:
@@ -102,6 +133,16 @@ spec:
             secretKeyRef:
               name: api-secret
               key: JWT_SECRET_KEY
+        - name: NEW_RELIC_LICENSE_KEY
+          valueFrom:
+            secretKeyRef:
+              name: api-secret
+              key: NEW_RELIC_LICENSE_KEY
+        - name: NewRelic__LicenseKey
+          valueFrom:
+            secretKeyRef:
+              name: api-secret
+              key: NEW_RELIC_LICENSE_KEY
         resources:
           requests:
             memory: "512Mi"
