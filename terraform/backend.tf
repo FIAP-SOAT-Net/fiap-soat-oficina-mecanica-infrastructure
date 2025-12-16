@@ -4,6 +4,6 @@ terraform {
     key            = "dev/terraform.tfstate"
     region         = "us-west-2"
     encrypt        = true
-    dynamodb_table = "smart-workshop-terraform-locks"
+    dynamodb_table = "smart-workshop-terraform-locks-243100982781"
   }
 }
