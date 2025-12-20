@@ -75,9 +75,9 @@ metadata:
   namespace: newrelic
 type: Opaque
 stringData:
-  # This will be set via kubectl or GitHub Actions
+  # New Relic License Key for Kubernetes Integration
   license: "YOUR_NEW_RELIC_LICENSE_KEY_HERE"
-  cluster: "smart-workshop-eks-cluster"
+  cluster: "smart-workshop-dev-cluster"
 
 ---
 apiVersion: v1
@@ -144,7 +144,7 @@ spec:
       dnsPolicy: ClusterFirstWithHostNet
       containers:
         - name: newrelic-infrastructure
-          image: newrelic/infrastructure-k8s:3.2.0
+          image: newrelic/infrastructure-k8s:2.13.15
           securityContext:
             privileged: true
           env:
@@ -226,6 +226,8 @@ spec:
     metadata:
       labels:
         app: newrelic-kube-state-metrics
+        app.kubernetes.io/name: kube-state-metrics
+        k8s-app: kube-state-metrics
     spec:
       serviceAccountName: newrelic
       containers:
@@ -257,6 +259,7 @@ metadata:
   namespace: newrelic
   labels:
     app: newrelic-kube-state-metrics
+    app.kubernetes.io/name: kube-state-metrics
 spec:
   type: ClusterIP
   ports:
