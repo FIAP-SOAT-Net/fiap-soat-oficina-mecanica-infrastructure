@@ -314,7 +314,7 @@ resource "helm_release" "aws_load_balancer_controller" {
 
   depends_on = [
     aws_eks_cluster.main,
-    aws_eks_fargate_profile.kube_system,
+    aws_eks_node_group.main,
     aws_iam_role_policy.aws_load_balancer_controller
   ]
 }

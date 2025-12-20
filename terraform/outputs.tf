@@ -25,26 +25,15 @@ output "cluster_certificate_authority_data" {
   sensitive   = true
 }
 
-# Fargate Profile Outputs
-output "fargate_profile_app_id" {
-  description = "Fargate profile ID for application namespace"
-  value       = aws_eks_fargate_profile.app.id
-}
-
-output "fargate_profile_kube_system_id" {
-  description = "Fargate profile ID for kube-system namespace"
-  value       = aws_eks_fargate_profile.kube_system.id
-}
-
 # IAM Outputs
 output "cluster_iam_role_arn" {
   description = "IAM role ARN of the EKS cluster"
   value       = aws_iam_role.eks_cluster_role.arn
 }
 
-output "fargate_pod_execution_role_arn" {
-  description = "IAM role ARN for Fargate pod execution"
-  value       = aws_iam_role.fargate_pod_execution_role.arn
+output "node_group_role_arn" {
+  description = "IAM role ARN for EKS node group"
+  value       = aws_iam_role.eks_node_group_role.arn
 }
 
 # Kubectl Config Command
@@ -78,8 +67,8 @@ output "useful_commands" {
     # Configure kubectl
     aws eks update-kubeconfig --region ${var.aws_region} --name ${aws_eks_cluster.main.name}
     
-    # Get Fargate nodes
-    kubectl get nodes
+    # Get EC2 nodes
+    kubectl get nodes -o wide
     
     # Get all resources
     kubectl get all -n ${var.project_name}
@@ -96,13 +85,16 @@ output "useful_commands" {
     # View MailHog logs
     kubectl logs -n ${var.project_name} -l app=mailhog -f
     
+    # View New Relic logs
+    kubectl logs -n newrelic -l app=newrelic-infrastructure -f
+    
     # Scale API deployment
     kubectl scale deployment api-deployment -n ${var.project_name} --replicas=2
     
     # Get HPA status
     kubectl get hpa -n ${var.project_name}
     
-    # Get Fargate profiles
-    aws eks list-fargate-profiles --cluster-name ${aws_eks_cluster.main.name}
+    # Get Node Group info
+    aws eks describe-nodegroup --cluster-name ${aws_eks_cluster.main.name} --nodegroup-name ${aws_eks_node_group.main.node_group_name}
   EOT
 }

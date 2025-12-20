@@ -32,52 +32,6 @@ resource "aws_iam_role_policy_attachment" "eks_vpc_resource_controller" {
   role       = aws_iam_role.eks_cluster_role.name
 }
 
-# IAM Role for EKS Node Group
-resource "aws_iam_role" "eks_node_group_role" {
-  name = "${var.project_name}-${var.environment}-eks-node-group-role"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Action = "sts:AssumeRole"
-      Effect = "Allow"
-      Principal = {
-        Service = "ec2.amazonaws.com"
-      }
-    }]
-  })
-
-  tags = merge(
-    var.tags,
-    {
-      Name = "${var.project_name}-${var.environment}-eks-node-group-role"
-    }
-  )
-}
-
-# Attach required policies to node group role
-resource "aws_iam_role_policy_attachment" "eks_worker_node_policy" {
-  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy"
-  role       = aws_iam_role.eks_node_group_role.name
-}
-
-resource "aws_iam_role_policy_attachment" "eks_cni_policy" {
-  policy_arn = "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy"
-  role       = aws_iam_role.eks_node_group_role.name
-}
-
-resource "aws_iam_role_policy_attachment" "eks_container_registry_policy" {
-  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
-  role       = aws_iam_role.eks_node_group_role.name
-}
-
-# Additional policy for EBS CSI Driver (required for persistent volumes)
-resource "aws_iam_role_policy_attachment" "eks_ebs_csi_driver_policy" {
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
-  role       = aws_iam_role.eks_node_group_role.name
-}
-
-# IAM Policy for Load Balancer Controller
 resource "aws_iam_policy" "load_balancer_controller" {
   name        = "${var.project_name}-${var.environment}-lb-controller-policy"
   description = "Policy for AWS Load Balancer Controller"
@@ -305,7 +259,3 @@ resource "aws_iam_policy" "load_balancer_controller" {
   tags = var.tags
 }
 
-resource "aws_iam_role_policy_attachment" "load_balancer_controller" {
-  policy_arn = aws_iam_policy.load_balancer_controller.arn
-  role       = aws_iam_role.eks_node_group_role.name
-}
